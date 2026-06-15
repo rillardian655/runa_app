@@ -26,7 +26,6 @@ jobs:
       - name: 🐦 Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.0'
           channel: 'stable'
           cache: true
 
@@ -70,7 +69,7 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           
           # Split APKs
-          mv build/flutter_assets/../app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
              build/app/outputs/flutter-apk/runa-app-${VERSION}-arm64.apk || true
           mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
              build/app/outputs/flutter-apk/runa-app-${VERSION}-armeabi.apk || true
