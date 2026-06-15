@@ -1,0 +1,205 @@
+import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:runa_app/core/services/auth_service.dart';
+import 'package:runa_app/core/utils/image_helper.dart';
+import 'package:go_router/go_router.dart';
+
+class EditProfileScreen extends StatefulWidget {
+  const EditProfileScreen({super.key});
+
+  @override
+  State<EditProfileScreen> createState() => _EditProfileScreenState();
+}
+
+class _EditProfileScreenState extends State<EditProfileScreen> {
+  final TextEditingController _usernameController = TextEditingController();
+  final TextEditingController _bioController = TextEditingController();
+  
+  bool _isLoading = false;
+  
+  XFile? _profileImage;
+  XFile? _bannerImage;
+  
+  String _currentPhotoUrl = '';
+  String _currentBannerUrl = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurrentData();
+  }
+
+  Future<void> _loadCurrentData() async {
+    final user = context.read<AuthService>().currentUser;
+    if (user != null) {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (doc.exists && mounted) {
+        final data = doc.data()!;
+        setState(() {
+          _usernameController.text = data['username'] ?? '';
+          _bioController.text = data['bio'] ?? '';
+          _currentPhotoUrl = data['photoUrl'] ?? '';
+          _currentBannerUrl = data['bannerUrl'] ?? '';
+        });
+      }
+    }
+  }
+
+  Future<void> _pickImage(bool isBanner) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: ImageSource.gallery, 
+      imageQuality: 30, // Compress to save Firestore space
+      maxWidth: isBanner ? 800 : 400,
+    );
+    
+    if (pickedFile != null) {
+      setState(() {
+        if (isBanner) {
+          _bannerImage = pickedFile;
+        } else {
+          _profileImage = pickedFile;
+        }
+      });
+    }
+  }
+
+  Future<String?> _uploadImageAsBase64(XFile file) async {
+    try {
+      final bytes = await file.readAsBytes();
+      final base64String = base64Encode(bytes);
+      // Determine mime type naively based on extension
+      String mimeType = 'image/jpeg';
+      if (file.name.toLowerCase().endsWith('.png')) {
+        mimeType = 'image/png';
+      }
+      return 'data:$mimeType;base64,$base64String';
+    } catch (e) {
+      debugPrint('Error converting image: $e');
+      return null;
+    }
+  }
+
+  Future<void> _saveChanges() async {
+    final user = context.read<AuthService>().currentUser;
+    if (user == null) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      String photoUrl = _currentPhotoUrl;
+      String bannerUrl = _currentBannerUrl;
+
+      if (_profileImage != null) {
+        final url = await _uploadImageAsBase64(_profileImage!);
+        if (url != null) photoUrl = url;
+      }
+
+      if (_bannerImage != null) {
+        final url = await _uploadImageAsBase64(_bannerImage!);
+        if (url != null) bannerUrl = url;
+      }
+
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+        'username': _usernameController.text.trim(),
+        'bio': _bioController.text.trim(),
+        'photoUrl': photoUrl,
+        'bannerUrl': bannerUrl,
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully!')));
+        context.pop();
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update: $e')));
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Edit Profile'),
+        actions: [
+          _isLoading
+              ? const Center(child: Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))))
+              : IconButton(icon: const Icon(Icons.check), onPressed: _saveChanges),
+        ],
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          // Banner Edit
+          GestureDetector(
+            onTap: () => _pickImage(true),
+            child: Container(
+              height: 150,
+              decoration: BoxDecoration(
+                color: Colors.grey[800],
+                borderRadius: BorderRadius.circular(12),
+                image: _bannerImage != null
+                    ? DecorationImage(image: kIsWeb ? NetworkImage(_bannerImage!.path) as ImageProvider : FileImage(File(_bannerImage!.path)), fit: BoxFit.cover)
+                    : (_currentBannerUrl.isNotEmpty ? DecorationImage(image: ImageHelper.getImageProvider(_currentBannerUrl), fit: BoxFit.cover) : null),
+              ),
+              child: _bannerImage == null && _currentBannerUrl.isEmpty
+                  ? const Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.camera_alt, color: Colors.white54, size: 40), Text('Tap to change banner', style: TextStyle(color: Colors.white54))]))
+                  : null,
+            ),
+          ),
+          const SizedBox(height: 24),
+          
+          // Profile Edit
+          Center(
+            child: GestureDetector(
+              onTap: () => _pickImage(false),
+              child: Stack(
+                children: [
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.blueAccent,
+                    backgroundImage: _profileImage != null
+                        ? (kIsWeb ? NetworkImage(_profileImage!.path) as ImageProvider : FileImage(File(_profileImage!.path)))
+                        : (_currentPhotoUrl.isNotEmpty ? ImageHelper.getImageProvider(_currentPhotoUrl) : null),
+                    child: _profileImage == null && _currentPhotoUrl.isEmpty
+                        ? const Icon(Icons.person, size: 50, color: Colors.white)
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
+                      child: const Icon(Icons.edit, size: 20, color: Colors.white),
+                    ),
+                  )
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+          
+          TextField(
+            controller: _usernameController,
+            decoration: const InputDecoration(labelText: 'Username', prefixIcon: Icon(Icons.person)),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _bioController,
+            decoration: const InputDecoration(labelText: 'Bio', prefixIcon: Icon(Icons.info_outline)),
+          ),
+        ],
+      ),
+    );
+  }
+}
