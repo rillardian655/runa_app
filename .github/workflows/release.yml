@@ -37,12 +37,8 @@ jobs:
       # 5. Buat key.properties
       - name: 📝 Create key.properties
         run: |
-          cat > android/key.properties << EOF
-          storePassword=${{ secrets.KEY_STORE_PASSWORD }}
-          keyPassword=${{ secrets.KEY_PASSWORD }}
-          keyAlias=${{ secrets.KEY_ALIAS }}
-          storeFile=runa_release.jks
-          EOF
+          printf 'storePassword=${{ secrets.KEY_STORE_PASSWORD }}\nkeyPassword=${{ secrets.KEY_PASSWORD }}\nkeyAlias=${{ secrets.KEY_ALIAS }}\nstoreFile=app/runa_release.jks\n' > android/key.properties
+          cat android/key.properties
 
       # 6. Buat google-services.json dari secret
       - name: 🔥 Create google-services.json
