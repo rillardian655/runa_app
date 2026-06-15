@@ -65,7 +65,7 @@ google-services.json
 GoogleService-Info.plist
 firebase.json
 key.properties
-lib/core/constants.dart
+
 
 # Keystore files (JANGAN diupload ke GitHub!)
 *.jks
