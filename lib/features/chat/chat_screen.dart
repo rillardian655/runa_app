@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 import 'package:runa_app/core/services/auth_service.dart';
 import 'package:runa_app/core/services/chat_service.dart';
 import 'package:runa_app/core/utils/image_helper.dart';
+import 'package:runa_app/core/widgets/image_viewer.dart';
 
 class ChatScreen extends StatefulWidget {
   final String userId; // Ini adalah friendUid (UID teman yang diajak chat)
@@ -71,6 +72,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildReplyBanner() {
     if (_replyingToMessage == null) return const SizedBox.shrink();
+    
+    final replyText = _replyingToMessage!['text'] ?? '';
+    final isStatusReply = replyText.startsWith('💬 Status: ');
+    final displayText = isStatusReply ? replyText.replaceFirst('💬 Status: ', '') : replyText;
+    final isImage = displayText.startsWith('data:image/') || displayText.startsWith('http');
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
@@ -86,12 +93,30 @@ class _ChatScreenState extends State<ChatScreen> {
               children: [
                 Text('Replying to...', style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 12)),
                 const SizedBox(height: 4),
-                Text(
-                  _replyingToMessage!['text'] ?? '',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 14),
-                ),
+                if (isImage)
+                  Row(
+                    children: [
+                      const Icon(Icons.image, size: 16, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      const Text('Foto', style: TextStyle(fontSize: 14)),
+                      const SizedBox(width: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: SizedBox(
+                          height: 30,
+                          width: 30,
+                          child: ImageHelper.getImageWidget(displayText, fit: BoxFit.cover),
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Text(
+                    displayText,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 14),
+                  ),
               ],
             ),
           ),
@@ -105,10 +130,11 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _buildReplyContext(String replyText, bool isMe) {
-    final isStatusReply = replyText.startsWith('💬 Status:');
+    final isStatusReply = replyText.startsWith('💬 Status: ');
     final accentColor = isStatusReply ? Colors.green : (isMe ? Colors.white54 : Theme.of(context).primaryColor);
     final label = isStatusReply ? '📢 Balasan Status' : 'Reply';
     final displayText = isStatusReply ? replyText.replaceFirst('💬 Status: ', '') : replyText;
+    final isImage = displayText.startsWith('data:image/') || displayText.startsWith('http');
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -129,17 +155,26 @@ class _ChatScreenState extends State<ChatScreen> {
               fontSize: 10,
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            displayText,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: isMe ? Colors.white70 : Colors.grey[700],
-              fontStyle: FontStyle.italic,
-              fontSize: 12,
+          const SizedBox(height: 4),
+          if (isImage)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 100, maxWidth: 100),
+                child: ImageHelper.getImageWidget(displayText, fit: BoxFit.cover),
+              ),
+            )
+          else
+            Text(
+              displayText,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: isMe ? Colors.white70 : Colors.grey[700],
+                fontStyle: FontStyle.italic,
+                fontSize: 12,
+              ),
             ),
-          ),
         ],
       ),
     );
@@ -354,11 +389,24 @@ class _ChatScreenState extends State<ChatScreen> {
                                   if (data['replyToText'] != null)
                                     _buildReplyContext(data['replyToText'], isMe),
                                   if (data['type'] == 'image')
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(8),
-                                      child: ConstrainedBox(
-                                        constraints: const BoxConstraints(maxHeight: 300),
-                                        child: ImageHelper.getImageWidget(text, fit: BoxFit.cover),
+                                    GestureDetector(
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => ImageViewer(imageUrl: text),
+                                          ),
+                                        );
+                                      },
+                                      child: ClipRRect(
+                                        borderRadius: BorderRadius.circular(8),
+                                        child: ConstrainedBox(
+                                          constraints: const BoxConstraints(maxHeight: 300),
+                                          child: Hero(
+                                            tag: text,
+                                            child: ImageHelper.getImageWidget(text, fit: BoxFit.cover),
+                                          ),
+                                        ),
                                       ),
                                     )
                                   else

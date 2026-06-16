@@ -36,6 +36,7 @@ class StatusService {
     required String username,
     required String photoUrl,
     required XFile imageFile,
+    String? caption,
   }) async {
     final bytes = await imageFile.readAsBytes();
     final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
@@ -48,6 +49,7 @@ class StatusService {
       'username': username,
       'photoUrl': photoUrl,
       'content': base64Image,
+      'caption': caption,
       'type': 'image',
       'bgColor': 0xFF000000,
       'timestamp': FieldValue.serverTimestamp(),

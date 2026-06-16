@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:runa_app/core/services/chat_service.dart';
+import 'package:runa_app/core/services/status_service.dart';
 import 'package:runa_app/core/utils/image_helper.dart';
 
 class StatusViewerScreen extends StatefulWidget {
@@ -96,7 +97,7 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
     // Build a status reply preview text
     String statusPreview;
     if (currentStatus['type'] == 'image') {
-      statusPreview = '📷 Foto';
+      statusPreview = currentStatus['content']; // pass the base64 or URL
     } else {
       final content = currentStatus['content'] as String? ?? '';
       statusPreview = content.length > 60 ? '${content.substring(0, 60)}...' : content;
@@ -205,9 +206,32 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
                 children: [
                   // --- Background Content ---
                   if (isImage)
-                    Image(
-                      image: ImageHelper.getImageProvider(currentStatus['content']),
-                      fit: BoxFit.contain,
+                    Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        Image(
+                          image: ImageHelper.getImageProvider(currentStatus['content']),
+                          fit: BoxFit.contain,
+                        ),
+                        if (currentStatus['caption'] != null && currentStatus['caption'].toString().isNotEmpty)
+                          Positioned(
+                            bottom: widget.isOwn ? 60 : 80,
+                            left: 16,
+                            right: 16,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                currentStatus['caption'],
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white, fontSize: 16),
+                              ),
+                            ),
+                          ),
+                      ],
                     )
                   else
                     Container(
@@ -318,6 +342,33 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
                             ],
                           ),
                         ),
+                        if (widget.isOwn)
+                          IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.white),
+                            onPressed: () async {
+                              _progressController.stop();
+                              final confirm = await showDialog<bool>(
+                                context: context,
+                                builder: (ctx) => AlertDialog(
+                                  backgroundColor: Theme.of(context).cardColor,
+                                  title: const Text('Hapus Status'),
+                                  content: const Text('Yakin ingin menghapus status ini?'),
+                                  actions: [
+                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+                                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Hapus', style: TextStyle(color: Colors.red))),
+                                  ],
+                                ),
+                              );
+                              if (confirm == true) {
+                                await StatusService().deleteStatus(currentStatus['id']);
+                                if (mounted) Navigator.pop(context);
+                              } else {
+                                _progressController.forward().then((_) {
+                                  if (mounted && !_isReplying) _nextStory();
+                                });
+                              }
+                            },
+                          ),
                         IconButton(
                           icon: const Icon(Icons.close, color: Colors.white),
                           onPressed: () => Navigator.of(context).pop(),

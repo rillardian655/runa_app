@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import 'package:runa_app/features/auth/login_screen.dart';
 import 'package:runa_app/features/auth/register_screen.dart';
@@ -11,7 +12,19 @@ import 'package:runa_app/features/friends/search_friends_screen.dart';
 import 'package:runa_app/features/status/add_status_screen.dart';
 
 final GoRouter appRouter = GoRouter(
-  initialLocation: '/login',
+  initialLocation: FirebaseAuth.instance.currentUser == null ? '/login' : '/',
+  redirect: (context, state) {
+    final isLoggedIn = FirebaseAuth.instance.currentUser != null;
+    final isGoingToLoginOrRegister = state.matchedLocation == '/login' || state.matchedLocation == '/register';
+
+    if (!isLoggedIn && !isGoingToLoginOrRegister) {
+      return '/login';
+    }
+    if (isLoggedIn && isGoingToLoginOrRegister) {
+      return '/';
+    }
+    return null;
+  },
   routes: [
     GoRoute(
       path: '/login',

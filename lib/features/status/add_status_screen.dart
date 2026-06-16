@@ -61,6 +61,7 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
           username: username,
           photoUrl: photoUrl,
           imageFile: _selectedImage!,
+          caption: _textController.text.trim().isNotEmpty ? _textController.text.trim() : null,
         );
       } else {
         if (_textController.text.trim().isEmpty) {
@@ -124,28 +125,53 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
           // --- Preview Area ---
           Expanded(
             child: _selectedImage != null
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        FutureBuilder<Uint8List>(
+                ? Stack(
+                    children: [
+                      Center(
+                        child: FutureBuilder<Uint8List>(
                           future: _selectedImage!.readAsBytes(),
                           builder: (context, snap) {
                             if (!snap.hasData) return const CircularProgressIndicator();
                             return ClipRRect(
                               borderRadius: BorderRadius.circular(12),
-                              child: Image.memory(snap.data!, height: 300, fit: BoxFit.cover),
+                              child: Image.memory(snap.data!, height: MediaQuery.of(context).size.height * 0.6, fit: BoxFit.contain),
                             );
                           },
                         ),
-                        const SizedBox(height: 16),
-                        TextButton.icon(
-                          onPressed: () => setState(() => _selectedImage = null),
-                          icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                          label: const Text('Hapus Gambar', style: TextStyle(color: Colors.redAccent)),
+                      ),
+                      Positioned(
+                        top: 16,
+                        right: 16,
+                        child: CircleAvatar(
+                          backgroundColor: Colors.black54,
+                          child: IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            onPressed: () => setState(() => _selectedImage = null),
+                          ),
                         ),
-                      ],
-                    ),
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          color: Colors.black54,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: TextField(
+                            controller: _textController,
+                            maxLines: 3,
+                            minLines: 1,
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            decoration: const InputDecoration(
+                              hintText: 'Tambah keterangan...',
+                              hintStyle: TextStyle(color: Colors.white54),
+                              border: InputBorder.none,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                      ),
+                    ],
                   )
                 : Container(
                     margin: const EdgeInsets.all(16),
