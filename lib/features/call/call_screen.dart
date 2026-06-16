@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:iconsax/iconsax.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:runa_app/core/services/call_service.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
@@ -45,6 +46,12 @@ class _CallScreenState extends State<CallScreen> {
 
   Future<void> _initCall() async {
     try {
+      // Minta izin mikrofon dan kamera
+      var status = await [Permission.microphone, Permission.camera].request();
+      if (status[Permission.microphone] != PermissionStatus.granted) {
+        throw Exception('Izin Mikrofon diperlukan untuk menelepon');
+      }
+
       await _callService.initRenderers();
 
       _callService.onCallEnded = () {
