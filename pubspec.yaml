@@ -1,7 +1,7 @@
 name: runa_app
 description: "Ru.na \u2014 Aplikasi Chat & Voice Call"
 publish_to: 'none'
-version: 1.0.11+1
+version: 1.0.12+1
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -40,4 +40,5 @@ flutter_launcher_icons:
 
 flutter:
   uses-material-design: true
-  disable-swift-package-manager: true
+  config:
+    enable-swift-package-manager: false
