@@ -106,3 +106,44 @@ jobs:
             build/app/outputs/flutter-apk/runa-app-*.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-ios:
+    name: Build & Release iOS (Unsigned IPA)
+    runs-on: macos-latest
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Install Dependencies
+        run: flutter pub get
+
+      - name: 🔨 Build iOS (Unsigned)
+        run: |
+          flutter build ios --release --no-codesign
+          
+          # Convert .app to .ipa
+          mkdir -p build/ios/iphoneos/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
+          cd build/ios/iphoneos
+          zip -qq -r runa-app-${{ github.ref_name }}-ios-unsigned.ipa Payload
+
+      - name: 🎉 Upload IPA to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Runa App ${{ github.ref_name }}"
+          body: |
+            ## 🍎 Khusus Pengguna iPhone (iOS)
+            File **runa-app-*-ios-unsigned.ipa** ini adalah versi Unsigned.
+            **Cara Install (Sideload):** Gunakan PC/Laptop dengan aplikasi seperti **Sideloadly**, **AltStore**, atau **TrollStore** (jika jailbreak). Tidak bisa diklik langsung dari Safari!
+          append_body: true
+          files: |
+            build/ios/iphoneos/runa-app-*-ios-unsigned.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
