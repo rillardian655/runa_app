@@ -56,13 +56,18 @@ class _ChatScreenState extends State<ChatScreen> {
 
   void _sendMessage(String currentUid) {
     if (_messageController.text.trim().isEmpty) return;
-    
+
+    final replyText = _replyingToMessage?['type'] == 'image'
+        ? '📷 Foto'
+        : _replyingToMessage?['text'];
+
     _chatService.sendMessage(
-      currentUid, 
-      widget.userId, 
+      currentUid,
+      widget.userId,
       _messageController.text.trim(),
       replyToId: _replyingToMessage?['id'],
-      replyToText: _replyingToMessage?['text'],
+      replyToText: replyText,
+      replyToType: _replyingToMessage?['type'],
     );
     _messageController.clear();
     setState(() {
@@ -72,18 +77,26 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _buildReplyBanner() {
     if (_replyingToMessage == null) return const SizedBox.shrink();
-    
+
     final replyText = _replyingToMessage!['text'] ?? '';
+    final replyType = _replyingToMessage!['type'] ?? 'text';
     final isStatusReply = replyText.startsWith('💬 Status: ');
-    final displayText = isStatusReply ? replyText.replaceFirst('💬 Status: ', '') : replyText;
-    final isImage = displayText.startsWith('data:image/') || displayText.startsWith('http');
+    final displayText =
+        isStatusReply ? replyText.replaceFirst('💬 Status: ', '') : replyText;
+    // Deteksi gambar: berdasarkan type field ATAU isi base64/url
+    final isImage = replyType == 'image' ||
+        displayText.startsWith('data:image/') ||
+        displayText.startsWith('http') ||
+        displayText == '📷 Foto';
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: Theme.of(context).cardColor,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-        border: Border(left: BorderSide(color: Theme.of(context).primaryColor, width: 4)),
+        border: Border(
+            left: BorderSide(
+                color: Theme.of(context).primaryColor, width: 4)),
       ),
       child: Row(
         children: [
@@ -91,7 +104,11 @@ class _ChatScreenState extends State<ChatScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Replying to...', style: TextStyle(color: Theme.of(context).primaryColor, fontWeight: FontWeight.bold, fontSize: 12)),
+                Text('Membalas...',
+                    style: TextStyle(
+                        color: Theme.of(context).primaryColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12)),
                 const SizedBox(height: 4),
                 if (isImage)
                   Row(
@@ -99,15 +116,21 @@ class _ChatScreenState extends State<ChatScreen> {
                       const Icon(Icons.image, size: 16, color: Colors.grey),
                       const SizedBox(width: 4),
                       const Text('Foto', style: TextStyle(fontSize: 14)),
-                      const SizedBox(width: 8),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
-                        child: SizedBox(
-                          height: 30,
-                          width: 30,
-                          child: ImageHelper.getImageWidget(displayText, fit: BoxFit.cover),
-                        ),
-                      ),
+                      // Tampilkan thumbnail jika ada data base64 asli
+                      if (displayText.startsWith('data:image/') ||
+                          displayText.startsWith('http')) ...
+                        [
+                          const SizedBox(width: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: SizedBox(
+                              height: 30,
+                              width: 30,
+                              child: ImageHelper.getImageWidget(displayText,
+                                  fit: BoxFit.cover),
+                            ),
+                          ),
+                        ],
                     ],
                   )
                 else
@@ -129,12 +152,21 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildReplyContext(String replyText, bool isMe) {
+  Widget _buildReplyContext(Map<String, dynamic> messageData, bool isMe) {
+    final replyText = messageData['replyToText'] as String? ?? '';
+    final replyType = messageData['replyToType'] as String? ?? 'text';
     final isStatusReply = replyText.startsWith('💬 Status: ');
-    final accentColor = isStatusReply ? Colors.green : (isMe ? Colors.white54 : Theme.of(context).primaryColor);
+    final accentColor = isStatusReply
+        ? Colors.green
+        : (isMe ? Colors.white54 : Theme.of(context).primaryColor);
     final label = isStatusReply ? '📢 Balasan Status' : 'Reply';
-    final displayText = isStatusReply ? replyText.replaceFirst('💬 Status: ', '') : replyText;
-    final isImage = displayText.startsWith('data:image/') || displayText.startsWith('http');
+    final displayText =
+        isStatusReply ? replyText.replaceFirst('💬 Status: ', '') : replyText;
+    // Deteksi gambar berdasarkan type field, base64, atau marker '📷 Foto'
+    final isImage = replyType == 'image' ||
+        displayText.startsWith('data:image/') ||
+        displayText.startsWith('http') ||
+        displayText == '📷 Foto';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
@@ -157,13 +189,33 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           const SizedBox(height: 4),
           if (isImage)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxHeight: 100, maxWidth: 100),
-                child: ImageHelper.getImageWidget(displayText, fit: BoxFit.cover),
-              ),
-            )
+            // Jika ada data base64 / URL nyata, tampilkan thumbnail
+            if (displayText.startsWith('data:image/') ||
+                displayText.startsWith('http'))
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: ConstrainedBox(
+                  constraints:
+                      const BoxConstraints(maxHeight: 80, maxWidth: 80),
+                  child: ImageHelper.getImageWidget(displayText,
+                      fit: BoxFit.cover),
+                ),
+              )
+            else
+              // Hanya marker '📷 Foto' — tampilkan ikon
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.image, size: 16,
+                      color: isMe ? Colors.white70 : Colors.grey[600]),
+                  const SizedBox(width: 4),
+                  Text('📷 Foto',
+                      style: TextStyle(
+                          color: isMe ? Colors.white70 : Colors.grey[700],
+                          fontStyle: FontStyle.italic,
+                          fontSize: 12)),
+                ],
+              )
           else
             Text(
               displayText,
@@ -367,6 +419,8 @@ class _ChatScreenState extends State<ChatScreen> {
                               _replyingToMessage = {
                                 'id': docs[index].id,
                                 'text': text,
+                                // Simpan type agar reply tahu ini foto/teks
+                                'type': data['type'] ?? 'text',
                               };
                             });
                           },
@@ -387,7 +441,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                                 children: [
                                   if (data['replyToText'] != null)
-                                    _buildReplyContext(data['replyToText'], isMe),
+                                    _buildReplyContext(data, isMe),
                                   if (data['type'] == 'image')
                                     GestureDetector(
                                       onTap: () {

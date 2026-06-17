@@ -36,7 +36,13 @@ class ChatService {
           String rawMsg = doc.data()['lastMessage'] ?? '';
           String finalMsg = rawMsg;
           if (rawMsg != '' && rawMsg != '[Encrypted]') {
-            finalMsg = await decrypt(rawMsg, getChatId(currentUid, userDoc.id));
+            final decrypted = await decrypt(rawMsg, getChatId(currentUid, userDoc.id));
+            // Jika last message adalah foto (base64), tampilkan label ramah
+            if (decrypted.startsWith('data:image/')) {
+              finalMsg = '📷 Foto';
+            } else {
+              finalMsg = decrypted;
+            }
           } else if (rawMsg == '[Encrypted]') {
             finalMsg = '[Encrypted Message]';
           }
@@ -54,11 +60,15 @@ class ChatService {
     });
   }
 
-  Future<void> sendMessage(String senderId, String receiverId, String text, {String? replyToId, String? replyToText, String type = 'text'}) async {
+  Future<void> sendMessage(String senderId, String receiverId, String text,
+      {String? replyToId,
+      String? replyToText,
+      String? replyToType,
+      String type = 'text'}) async {
     final chatId = getChatId(senderId, receiverId);
     final encryptedText = await _encryptionService.encryptMessage(text, chatId);
 
-    final messageData = {
+    final messageData = <String, dynamic>{
       'senderId': senderId,
       'receiverId': receiverId,
       'text': encryptedText,
@@ -66,20 +76,40 @@ class ChatService {
       'timestamp': FieldValue.serverTimestamp(),
       'status': 'sent', // sent, delivered, read
     };
-    
+
     if (replyToId != null) messageData['replyToId'] = replyToId;
     if (replyToText != null) messageData['replyToText'] = replyToText;
+    if (replyToType != null) messageData['replyToType'] = replyToType;
 
-    await _firestore.collection('chats').doc(chatId).collection('messages').add(messageData);
+    await _firestore
+        .collection('chats')
+        .doc(chatId)
+        .collection('messages')
+        .add(messageData);
 
-    // Update recent_chats for both users
-    await _firestore.collection('users').doc(senderId).collection('recent_chats').doc(receiverId).set({
-      'lastMessage': encryptedText,
+    // lastMessage untuk tampilan di chat list:
+    // jika foto → tampilkan '📷 Foto', bukan base64 terenkripsi
+    final lastMessagePreview = type == 'image' ? '📷 Foto' : encryptedText;
+
+    // Update recent_chats untuk pengirim
+    await _firestore
+        .collection('users')
+        .doc(senderId)
+        .collection('recent_chats')
+        .doc(receiverId)
+        .set({
+      'lastMessage': lastMessagePreview,
       'timestamp': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
 
-    await _firestore.collection('users').doc(receiverId).collection('recent_chats').doc(senderId).set({
-      'lastMessage': encryptedText,
+    // Update recent_chats untuk penerima (+ increment unread)
+    await _firestore
+        .collection('users')
+        .doc(receiverId)
+        .collection('recent_chats')
+        .doc(senderId)
+        .set({
+      'lastMessage': lastMessagePreview,
       'timestamp': FieldValue.serverTimestamp(),
       'unreadCount': FieldValue.increment(1),
     }, SetOptions(merge: true));
