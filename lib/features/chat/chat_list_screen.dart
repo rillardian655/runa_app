@@ -129,14 +129,31 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             ),
                           ),
                           title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text(
-                            chat['lastMessage'], 
-                            maxLines: 1, 
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontWeight: (chat['unreadCount'] ?? 0) > 0 ? FontWeight.bold : FontWeight.normal,
-                              color: (chat['unreadCount'] ?? 0) > 0 ? Theme.of(context).textTheme.bodyLarge?.color : Colors.grey,
-                            ),
+                          subtitle: Builder(
+                            builder: (context) {
+                              final String rawMessage = chat['lastMessage'] ?? '';
+                              final bool isImageMessage = rawMessage.startsWith('data:image/') || rawMessage.startsWith('http');
+                              
+                              return Row(
+                                children: [
+                                  if (isImageMessage) ...[
+                                    const Icon(Icons.image, size: 14, color: Colors.grey),
+                                    const SizedBox(width: 4),
+                                  ],
+                                  Expanded(
+                                    child: Text(
+                                      isImageMessage ? 'Foto' : rawMessage, 
+                                      maxLines: 1, 
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontWeight: (chat['unreadCount'] ?? 0) > 0 ? FontWeight.bold : FontWeight.normal,
+                                        color: (chat['unreadCount'] ?? 0) > 0 ? Theme.of(context).textTheme.bodyLarge?.color : Colors.grey,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            }
                           ),
                           trailing: Column(
                             mainAxisAlignment: MainAxisAlignment.center,

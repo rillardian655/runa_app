@@ -23,6 +23,7 @@ class FriendService {
               'uid': userDoc.id,
               'name': userDoc.data()?['username'] ?? 'Unknown',
               'status': userDoc.data()?['bio'] ?? 'Available',
+              'photoUrl': userDoc.data()?['photoUrl'] ?? '',
             });
           }
         }
@@ -157,5 +158,42 @@ class FriendService {
         .collection('friends')
         .doc(currentUid)
         .delete();
+  }
+  // Mendapatkan daftar semua user
+  Stream<List<Map<String, dynamic>>> getAllUsers(String currentUid) {
+    return _firestore.collection('users').snapshots().map((snapshot) {
+      return snapshot.docs
+          .where((doc) => doc.id != currentUid)
+          .map((doc) => {
+                'uid': doc.id,
+                ...doc.data(),
+              })
+          .toList();
+    });
+  }
+
+  // Mendapatkan daftar permintaan pertemanan yang dikirim (status 'pending')
+  Stream<List<Map<String, dynamic>>> getSentRequests(String currentUid) {
+    return _firestore
+        .collection('users')
+        .doc(currentUid)
+        .collection('friends')
+        .where('status', isEqualTo: 'pending')
+        .snapshots()
+        .asyncMap((snapshot) async {
+      List<Map<String, dynamic>> requests = [];
+      for (var doc in snapshot.docs) {
+        var userDoc = await _firestore.collection('users').doc(doc.id).get();
+        if (userDoc.exists) {
+          requests.add({
+            'uid': userDoc.id,
+            'name': userDoc.data()?['username'] ?? 'Unknown',
+            'status': userDoc.data()?['bio'] ?? 'Available',
+            'photoUrl': userDoc.data()?['photoUrl'] ?? '',
+          });
+        }
+      }
+      return requests;
+    });
   }
 }

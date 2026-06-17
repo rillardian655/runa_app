@@ -10,8 +10,6 @@ import 'package:runa_app/firebase_options.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // Wajib didaftarkan SEBELUM Firebase.initializeApp()
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -19,6 +17,9 @@ void main() async {
   } catch (e) {
     debugPrint("Firebase not initialized yet or config missing: $e");
   }
+
+  // Wajib didaftarkan SETELAH Firebase.initializeApp() untuk mencegah error
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
   runApp(
     MultiProvider(

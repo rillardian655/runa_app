@@ -27,6 +27,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   
   String _currentPhotoUrl = '';
   String _currentBannerUrl = '';
+  String _currentUsername = '';
+  Timestamp? _lastUsernameChange;
 
   @override
   void initState() {
@@ -41,10 +43,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (doc.exists && mounted) {
         final data = doc.data()!;
         setState(() {
-          _usernameController.text = data['username'] ?? '';
+          _currentUsername = data['username'] ?? '';
+          _usernameController.text = _currentUsername;
           _bioController.text = data['bio'] ?? '';
           _currentPhotoUrl = data['photoUrl'] ?? '';
           _currentBannerUrl = data['bannerUrl'] ?? '';
+          _lastUsernameChange = data['lastUsernameChange'];
         });
       }
     }
@@ -105,12 +109,34 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         if (url != null) bannerUrl = url;
       }
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
-        'username': _usernameController.text.trim(),
+      final newUsername = _usernameController.text.trim();
+      
+      Map<String, dynamic> updateData = {
         'bio': _bioController.text.trim(),
         'photoUrl': photoUrl,
         'bannerUrl': bannerUrl,
-      });
+      };
+
+      if (newUsername != _currentUsername) {
+        if (_lastUsernameChange != null) {
+          final lastChangeDate = _lastUsernameChange!.toDate();
+          final daysSinceChange = DateTime.now().difference(lastChangeDate).inDays;
+          if (daysSinceChange < 14) {
+            final daysLeft = 14 - daysSinceChange;
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Username hanya bisa diubah setiap 14 hari. Sisa $daysLeft hari lagi.')),
+              );
+              setState(() => _isLoading = false);
+            }
+            return;
+          }
+        }
+        updateData['username'] = newUsername;
+        updateData['lastUsernameChange'] = FieldValue.serverTimestamp();
+      }
+
+      await FirebaseFirestore.instance.collection('users').doc(user.uid).update(updateData);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated successfully!')));

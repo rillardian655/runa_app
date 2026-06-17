@@ -93,7 +93,7 @@ class NotificationService {
     }
 
     const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/launcher_icon');
+        AndroidInitializationSettings('launcher_icon');
 
     const DarwinInitializationSettings iosSettings =
         DarwinInitializationSettings(
@@ -128,7 +128,7 @@ class NotificationService {
           priority: Priority.high,
           playSound: true,
           enableVibration: true,
-          icon: '@mipmap/launcher_icon',
+          icon: 'launcher_icon',
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,

@@ -123,7 +123,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Iconsax.user),
             title: const Text('Account'),
             trailing: const Icon(Icons.chevron_right),
-            onTap: () {},
+            onTap: () {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Account'),
+                  content: const Text('Fitur manajemen akun akan segera hadir!'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('OK'),
+                    )
+                  ],
+                )
+              );
+            },
           ),
           ListTile(
             leading: const Icon(Iconsax.folder),
@@ -137,7 +151,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             leading: const Icon(Iconsax.info_circle),
             title: const Text('About'),
             subtitle: const Text('Ru.na App v1.0.0'),
-            onTap: () {},
+            onTap: () {
+              showAboutDialog(
+                context: context,
+                applicationName: 'Ru.na App',
+                applicationVersion: 'v1.0.0',
+                applicationIcon: const Icon(Icons.chat_bubble, size: 40),
+                children: const [
+                  Text('Aplikasi perpesanan Runa App dengan fitur enkripsi.'),
+                ],
+              );
+            },
           ),
           const Divider(),
           ListTile(

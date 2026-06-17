@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
@@ -237,25 +238,106 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _pickImage(ImageSource source, String currentUid) async {
     Navigator.pop(context); // Close bottom sheet
     try {
-      final XFile? image = await _picker.pickImage(source: source, imageQuality: 50);
-      if (image != null) {
-        final bytes = await image.readAsBytes();
-        final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
-        
-        _chatService.sendMessage(
-          currentUid, 
-          widget.userId, 
-          base64Image,
-          type: 'image',
-        );
+      List<XFile> selectedImages = [];
+      if (source == ImageSource.gallery) {
+        final images = await _picker.pickMultiImage(imageQuality: 50);
+        selectedImages.addAll(images);
+      } else {
+        final image = await _picker.pickImage(source: source, imageQuality: 50);
+        if (image != null) selectedImages.add(image);
+      }
+      
+      if (selectedImages.isNotEmpty) {
+        if (mounted) {
+          _showImagePreviewDialog(currentUid, selectedImages);
+        }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal mengirim gambar: $e')),
+          SnackBar(content: Text('Gagal mengambil gambar: $e')),
         );
       }
     }
+  }
+
+  void _showImagePreviewDialog(String currentUid, List<XFile> images) {
+    final TextEditingController captionController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('Kirim ${images.length} Foto'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                height: 150,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: images.length,
+                  itemBuilder: (context, index) {
+                    return Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: FutureBuilder(
+                          future: images[index].readAsBytes(),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+                            return Image.memory(snapshot.data as Uint8List, fit: BoxFit.cover, width: 100);
+                          }
+                        ),
+                      ),
+                    );
+                  }
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: captionController,
+                decoration: const InputDecoration(
+                  hintText: 'Tambah caption (opsional)...',
+                  border: OutlineInputBorder(),
+                ),
+              )
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context); // Close dialog
+                for (int i = 0; i < images.length; i++) {
+                  final bytes = await images[i].readAsBytes();
+                  final base64Image = 'data:image/jpeg;base64,${base64Encode(bytes)}';
+                  
+                  _chatService.sendMessage(
+                    currentUid, 
+                    widget.userId, 
+                    base64Image,
+                    type: 'image',
+                  );
+                  
+                  if (i == images.length - 1 && captionController.text.isNotEmpty) {
+                    _chatService.sendMessage(
+                      currentUid,
+                      widget.userId,
+                      captionController.text,
+                    );
+                  }
+                }
+              },
+              child: const Text('Kirim'),
+            )
+          ],
+        );
+      }
+    );
   }
 
   void _showAttachmentBottomSheet(BuildContext context) {

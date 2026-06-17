@@ -21,6 +21,7 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _currentIndex = 0;
+  late PageController _pageController;
   StreamSubscription? _incomingCallSubscription;
   final SignalingService _signalingService = SignalingService();
   bool _isShowingIncomingCall = false;
@@ -35,6 +36,7 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startListeningForCalls();
     });
@@ -105,6 +107,7 @@ class _MainLayoutState extends State<MainLayout> {
 
   @override
   void dispose() {
+    _pageController.dispose();
     _incomingCallSubscription?.cancel();
     super.dispose();
   }
@@ -115,7 +118,13 @@ class _MainLayoutState extends State<MainLayout> {
     final currentUser = authService.currentUser;
 
     return Scaffold(
-      body: _pages[_currentIndex],
+      body: PageView(
+        controller: _pageController,
+        onPageChanged: (index) {
+          setState(() => _currentIndex = index);
+        },
+        children: _pages,
+      ),
       bottomNavigationBar: StreamBuilder<List<Map<String, dynamic>>>(
         stream: currentUser != null
             ? ChatService().getRecentChats(currentUser.uid)
@@ -130,7 +139,14 @@ class _MainLayoutState extends State<MainLayout> {
 
           return BottomNavigationBar(
             currentIndex: _currentIndex,
-            onTap: (index) => setState(() => _currentIndex = index),
+            onTap: (index) {
+              setState(() => _currentIndex = index);
+              _pageController.animateToPage(
+                index,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+            },
             type: BottomNavigationBarType.fixed,
             items: [
               BottomNavigationBarItem(

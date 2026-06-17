@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:runa_app/core/services/chat_service.dart';
 import 'package:runa_app/core/services/status_service.dart';
 import 'package:runa_app/core/utils/image_helper.dart';
@@ -35,6 +36,7 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
   final FocusNode _replyFocusNode = FocusNode();
   final ChatService _chatService = ChatService();
   bool _isSending = false;
+  bool _isPaused = false;
 
   @override
   void initState() {
@@ -145,6 +147,62 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
     }
   }
 
+  void _showSpectators(List<String> viewerUids) {
+    if (viewerUids.isEmpty) return;
+    _progressController.stop();
+    setState(() => _isPaused = true);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).cardColor,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
+      builder: (context) {
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text('Dilihat Oleh', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: viewerUids.length,
+                itemBuilder: (context, index) {
+                  return FutureBuilder<DocumentSnapshot>(
+                    future: FirebaseFirestore.instance.collection('users').doc(viewerUids[index]).get(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return const ListTile(title: Text('Loading...'));
+                      final data = snapshot.data!.data() as Map<String, dynamic>?;
+                      if (data == null) return const SizedBox.shrink();
+                      final photoUrl = data['photoUrl'] ?? '';
+                      final name = data['username'] ?? 'Unknown';
+                      return ListTile(
+                        leading: CircleAvatar(
+                          backgroundImage: photoUrl.isNotEmpty ? ImageHelper.getImageProvider(photoUrl) : null,
+                          child: photoUrl.isEmpty ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?') : null,
+                        ),
+                        title: Text(name),
+                      );
+                    }
+                  );
+                }
+              ),
+            ),
+          ]
+        );
+      }
+    ).then((_) {
+      if (mounted) {
+        setState(() => _isPaused = false);
+        if (!_isReplying) {
+          _progressController.forward().then((_) {
+            if (mounted && !_isReplying) _nextStory();
+          });
+        }
+      }
+    });
+  }
+
   String _timeAgo(dynamic timestamp) {
     if (timestamp == null) return '';
     DateTime dt;
@@ -189,7 +247,8 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
             _nextStory();
           } else {
             // Pause / resume on center tap
-            if (_progressController.isAnimating) {
+            setState(() => _isPaused = !_isPaused);
+            if (_isPaused) {
               _progressController.stop();
             } else {
               _progressController.forward().then((_) {
@@ -272,32 +331,36 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
                     top: MediaQuery.of(context).padding.top + 8,
                     left: 8,
                     right: 8,
-                    child: AnimatedBuilder(
-                      animation: _progressController,
-                      builder: (context, child) {
-                        return Row(
-                          children: List.generate(widget.statuses.length, (i) {
-                            return Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 2),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: LinearProgressIndicator(
-                                    value: i < _currentIndex
-                                        ? 1.0
-                                        : i == _currentIndex
-                                            ? _progressController.value
-                                            : 0.0,
-                                    minHeight: 3,
-                                    backgroundColor: Colors.white30,
-                                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                    child: AnimatedOpacity(
+                      opacity: _isPaused ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: AnimatedBuilder(
+                        animation: _progressController,
+                        builder: (context, child) {
+                          return Row(
+                            children: List.generate(widget.statuses.length, (i) {
+                              return Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: LinearProgressIndicator(
+                                      value: i < _currentIndex
+                                          ? 1.0
+                                          : i == _currentIndex
+                                              ? _progressController.value
+                                              : 0.0,
+                                      minHeight: 3,
+                                      backgroundColor: Colors.white30,
+                                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                                    ),
                                   ),
                                 ),
-                              ),
-                            );
-                          }),
-                        );
-                      },
+                              );
+                            }),
+                          );
+                        },
+                      ),
                     ),
                   ),
 
@@ -306,74 +369,78 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
                     top: MediaQuery.of(context).padding.top + 20,
                     left: 12,
                     right: 12,
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 20,
-                          backgroundColor: Colors.blueAccent,
-                          backgroundImage: widget.ownerPhotoUrl.isNotEmpty
-                              ? ImageHelper.getImageProvider(widget.ownerPhotoUrl)
-                              : null,
-                          child: widget.ownerPhotoUrl.isEmpty
-                              ? Text(
-                                  widget.ownerName.isNotEmpty ? widget.ownerName[0].toUpperCase() : '?',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                                )
-                              : null,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                widget.ownerName,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              Text(
-                                _timeAgo(currentStatus['timestamp']),
-                                style: const TextStyle(color: Colors.white70, fontSize: 12),
-                              ),
-                            ],
+                    child: AnimatedOpacity(
+                      opacity: _isPaused ? 0.0 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor: Colors.blueAccent,
+                            backgroundImage: widget.ownerPhotoUrl.isNotEmpty
+                                ? ImageHelper.getImageProvider(widget.ownerPhotoUrl)
+                                : null,
+                            child: widget.ownerPhotoUrl.isEmpty
+                                ? Text(
+                                    widget.ownerName.isNotEmpty ? widget.ownerName[0].toUpperCase() : '?',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                  )
+                                : null,
                           ),
-                        ),
-                        if (widget.isOwn)
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  widget.ownerName,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  _timeAgo(currentStatus['timestamp']),
+                                  style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (widget.isOwn)
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.white),
+                              onPressed: () async {
+                                _progressController.stop();
+                                final confirm = await showDialog<bool>(
+                                  context: context,
+                                  builder: (ctx) => AlertDialog(
+                                    backgroundColor: Theme.of(context).cardColor,
+                                    title: const Text('Hapus Status'),
+                                    content: const Text('Yakin ingin menghapus status ini?'),
+                                    actions: [
+                                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
+                                      TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Hapus', style: TextStyle(color: Colors.red))),
+                                    ],
+                                  ),
+                                );
+                                if (confirm == true) {
+                                  await StatusService().deleteStatus(currentStatus['id']);
+                                  if (mounted) Navigator.pop(context);
+                                } else {
+                                  _progressController.forward().then((_) {
+                                    if (mounted && !_isReplying) _nextStory();
+                                  });
+                                }
+                              },
+                            ),
                           IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.white),
-                            onPressed: () async {
-                              _progressController.stop();
-                              final confirm = await showDialog<bool>(
-                                context: context,
-                                builder: (ctx) => AlertDialog(
-                                  backgroundColor: Theme.of(context).cardColor,
-                                  title: const Text('Hapus Status'),
-                                  content: const Text('Yakin ingin menghapus status ini?'),
-                                  actions: [
-                                    TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Batal')),
-                                    TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Hapus', style: TextStyle(color: Colors.red))),
-                                  ],
-                                ),
-                              );
-                              if (confirm == true) {
-                                await StatusService().deleteStatus(currentStatus['id']);
-                                if (mounted) Navigator.pop(context);
-                              } else {
-                                _progressController.forward().then((_) {
-                                  if (mounted && !_isReplying) _nextStory();
-                                });
-                              }
-                            },
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            onPressed: () => Navigator.of(context).pop(),
                           ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.white),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
 
@@ -383,15 +450,22 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
                       bottom: 16,
                       left: 16,
                       right: 16,
-                      child: Row(
-                        children: [
-                          const Icon(Icons.remove_red_eye, color: Colors.white70, size: 18),
-                          const SizedBox(width: 6),
-                          Text(
-                            '$viewCount dilihat',
-                            style: const TextStyle(color: Colors.white70),
+                      child: AnimatedOpacity(
+                        opacity: _isPaused ? 0.0 : 1.0,
+                        duration: const Duration(milliseconds: 200),
+                        child: GestureDetector(
+                          onTap: () => _showSpectators(viewedBy),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.remove_red_eye, color: Colors.white70, size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                '$viewCount dilihat',
+                                style: const TextStyle(color: Colors.white70),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
                 ],
@@ -400,7 +474,11 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
 
             // --- Reply input bar (only for other people's status) ---
             if (!widget.isOwn)
-              _buildReplyBar(),
+              AnimatedOpacity(
+                opacity: _isPaused ? 0.0 : 1.0,
+                duration: const Duration(milliseconds: 200),
+                child: _buildReplyBar(),
+              ),
           ],
         ),
       ),

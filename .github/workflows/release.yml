@@ -89,11 +89,15 @@ jobs:
           body: |
             ## 📱 Runa App ${{ github.ref_name }}
 
-            ### ✨ Perubahan v1.0.16
-            - 🔔 **Fix notifikasi HP** — Diperbaiki sistem notifikasi push (FCM v1 API), sekarang notif pesan muncul di HP meskipun app ditutup
-            - 📷 **Fix balas foto** — Reply ke foto sekarang tampil dengan ikon foto, bukan link/teks acak
-            - 📋 **Fix preview chat** — Pesan terakhir berupa foto sekarang tampil sebagai "📷 Foto" di daftar chat
-            - 🔔 **Notif foreground** — Notifikasi muncul juga saat app sedang terbuka
+            ### ✨ Perubahan v1.0.17
+            - 🔔 **Fix notifikasi HP** — Notifikasi push sekarang berfungsi.
+            - 📷 **Multi-foto & Caption** — Bisa kirim banyak foto sekaligus dengan caption.
+            - 👁️ **Status Spectating** — Lihat siapa saja yang melihat statusmu.
+            - 👥 **Global Users & Request History** — Tab Friends sekarang punya fitur Discover dan Riwayat Permintaan.
+            - 🛠️ **Account & About** — Tombol Account dan About di Settings sekarang berfungsi.
+            - ⏳ **Username Cooldown** — Batas waktu ubah username 14 hari.
+            - 🎥 **Video Status** — Fitur status video sekarang didukung.
+            - 👆 **Swipeable Tabs** — Geser layar untuk pindah tab.
 
             ### Download APK:
             - **runa-app-*-arm64.apk** → Untuk HP modern (64-bit) — **Direkomendasikan**
