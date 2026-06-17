@@ -89,7 +89,7 @@ jobs:
           body: |
             ## 📱 Runa App ${{ github.ref_name }}
 
-            ### ✨ Perubahan v1.0.17
+            ### ✨ Perubahan v1.0.18
             - 🔔 **Fix notifikasi HP** — Notifikasi push sekarang berfungsi.
             - 📷 **Multi-foto & Caption** — Bisa kirim banyak foto sekaligus dengan caption.
             - 👁️ **Status Spectating** — Lihat siapa saja yang melihat statusmu.
