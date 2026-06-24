@@ -59,7 +59,7 @@ class _StatusScreenState extends State<StatusScreen> {
         title: const Text('Status'),
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _statusService.getPublicStatuses(currentUser.id),
+        stream: _statusService.getPublicStatuses(currentUser.uid),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -79,8 +79,8 @@ class _StatusScreenState extends State<StatusScreen> {
           }
 
           final groups = snapshot.data ?? [];
-          final ownGroup = groups.where((g) => g['uid'] == currentUser.id).firstOrNull;
-          final otherGroups = groups.where((g) => g['uid'] != currentUser.id).toList();
+          final ownGroup = groups.where((g) => g['uid'] == currentUser.uid).firstOrNull;
+          final otherGroups = groups.where((g) => g['uid'] != currentUser.uid).toList();
 
           return ListView(
             children: [
@@ -94,7 +94,7 @@ class _StatusScreenState extends State<StatusScreen> {
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.5)),
               ),
-              _buildMyStatusTile(context, currentUser.id, ownGroup),
+              _buildMyStatusTile(context, currentUser.uid, ownGroup),
 
               // ── OTHER USERS' STATUS ─────────────────────
               if (otherGroups.isNotEmpty) ...[
@@ -107,7 +107,7 @@ class _StatusScreenState extends State<StatusScreen> {
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.5)),
                 ),
-                ...otherGroups.map((group) => _buildOtherStatusTile(context, group, currentUser.id)),
+                ...otherGroups.map((group) => _buildOtherStatusTile(context, group, currentUser.uid)),
               ] else
                 Padding(
                   padding: const EdgeInsets.all(32),
