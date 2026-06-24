@@ -102,7 +102,7 @@ class _MainLayoutState extends State<MainLayout> {
             context.push('/call', extra: {
               'callId': callId,
               'currentUserId': currentUser.uid,
-              'currentUserName': currentUser.userMetadata?['username'] ??
+              'currentUserName': currentUser.displayName ??
                   currentUser.email?.split('@')[0] ??
                   'User',
               'friendUserId': callerId,

@@ -103,8 +103,19 @@ class _ChatScreenState extends State<ChatScreen> {
           .get();
       if (mounted) {
         setState(() {
-          _friendName = (doc.exists ? doc.data()?['username'] as String? : null) ?? 'Unknown User';
-          _friendPhotoUrl = (doc.exists ? doc.data()?['photo_url'] as String? : null) ?? '';
+          if (doc.exists) {
+            final data = doc.data() as Map<String, dynamic>?;
+            if (data != null) {
+              _friendName = data['username'] as String? ?? 'Unknown User';
+              _friendPhotoUrl = data['photo_url'] as String? ?? '';
+            } else {
+              _friendName = 'Unknown User';
+              _friendPhotoUrl = '';
+            }
+          } else {
+            _friendName = 'Unknown User';
+            _friendPhotoUrl = '';
+          }
         });
       }
     } catch (e) {
@@ -982,7 +993,7 @@ class _ChatScreenState extends State<ChatScreen> {
               context.push('/call', extra: {
                 'callId': '',
                 'currentUserId': currentUser.uid,
-                'currentUserName': currentUser.userMetadata?['username'] ??
+                'currentUserName': currentUser.displayName ??
                     currentUser.email?.split('@')[0] ??
                     'User',
                 'friendUserId': widget.userId,
