@@ -1,0 +1,159 @@
+name: 🚀 Release APK
+
+on:
+  push:
+    tags:
+      - 'v*'   # Trigger saat push tag seperti v1.0.0, v1.2.3, dll
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Release APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Checkout kode
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      # 2. Setup Java
+      - name: ☕ Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # 3. Setup Flutter
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      # 4. Decode keystore dari GitHub Secret
+      - name: 🔑 Decode Keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > android/app/runa_release.jks
+
+      # 5. Buat key.properties
+      - name: 📝 Create key.properties
+        run: |
+          printf 'storePassword=${{ secrets.KEY_STORE_PASSWORD }}\nkeyPassword=${{ secrets.KEY_PASSWORD }}\nkeyAlias=${{ secrets.KEY_ALIAS }}\nstoreFile=runa_release.jks\n' > android/key.properties
+          cat android/key.properties
+
+      # 6. Buat google-services.json dari secret
+      - name: 🔥 Create google-services.json
+        run: |
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
+
+      # 7. Install dependencies
+      - name: 📦 Install Dependencies
+        run: flutter pub get
+
+      # 8. Build APK (split per ABI supaya file kecil)
+      - name: 🔨 Build APK (Split per ABI)
+        run: |
+          flutter build apk --release --split-per-abi
+
+      # 9. Build APK Universal (satu file untuk semua device)
+      - name: 🔨 Build APK Universal
+        run: |
+          flutter build apk --release
+
+      # 10. Rename APK dengan nama yang bagus
+      - name: 📋 Rename APK Files
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          
+          # Split APKs
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk \
+             build/app/outputs/flutter-apk/runa-app-${VERSION}-arm64.apk || true
+          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk \
+             build/app/outputs/flutter-apk/runa-app-${VERSION}-armeabi.apk || true
+          mv build/app/outputs/flutter-apk/app-x86_64-release.apk \
+             build/app/outputs/flutter-apk/runa-app-${VERSION}-x86_64.apk || true
+          
+          # Universal APK
+          mv build/app/outputs/flutter-apk/app-release.apk \
+             build/app/outputs/flutter-apk/runa-app-${VERSION}-universal.apk || true
+          
+          ls -la build/app/outputs/flutter-apk/
+
+      # 11. Upload ke GitHub Releases
+      - name: 🎉 Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Runa App ${{ github.ref_name }}"
+          body: |
+            ## 📱 Runa App ${{ github.ref_name }}
+
+            ### ✨ Perubahan v1.0.18
+            - 🔔 **Fix notifikasi HP** — Notifikasi push sekarang berfungsi.
+            - 📷 **Multi-foto & Caption** — Bisa kirim banyak foto sekaligus dengan caption.
+            - 👁️ **Status Spectating** — Lihat siapa saja yang melihat statusmu.
+            - 👥 **Global Users & Request History** — Tab Friends sekarang punya fitur Discover dan Riwayat Permintaan.
+            - 🛠️ **Account & About** — Tombol Account dan About di Settings sekarang berfungsi.
+            - ⏳ **Username Cooldown** — Batas waktu ubah username 14 hari.
+            - 🎥 **Video Status** — Fitur status video sekarang didukung.
+            - 👆 **Swipeable Tabs** — Geser layar untuk pindah tab.
+
+            ### Download APK:
+            - **runa-app-*-arm64.apk** → Untuk HP modern (64-bit) — **Direkomendasikan**
+            - **runa-app-*-armeabi.apk** → Untuk HP lama (32-bit)
+            - **runa-app-*-x86_64.apk** → Untuk emulator
+            - **runa-app-*-universal.apk** → Untuk semua device (file lebih besar)
+
+            ### Cara Install:
+            1. Download APK sesuai HP kamu (biasanya pilih **arm64**)
+            2. Buka file APK di HP
+            3. Izinkan install dari sumber tidak dikenal jika diminta
+            4. Install dan buka Runa App! 🚀
+          draft: false
+          prerelease: false
+          files: |
+            build/app/outputs/flutter-apk/runa-app-*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-ios:
+    name: Build & Release iOS (Unsigned IPA)
+    runs-on: macos-13
+
+    steps:
+      - name: 📥 Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🐦 Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: 📦 Install Dependencies
+        run: flutter pub get
+
+      - name: 🔨 Build iOS (Unsigned)
+        run: |
+          flutter build ios --release --no-codesign
+          
+          # Convert .app to .ipa
+          mkdir -p build/ios/iphoneos/Payload
+          cp -r build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
+          cd build/ios/iphoneos
+          zip -qq -r runa-app-${{ github.ref_name }}-ios-unsigned.ipa Payload
+
+      - name: 🎉 Upload IPA to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Runa App ${{ github.ref_name }}"
+          body: |
+            ## 🍎 Khusus Pengguna iPhone (iOS)
+            File **runa-app-*-ios-unsigned.ipa** ini adalah versi Unsigned.
+            **Cara Install (Sideload):** Gunakan PC/Laptop dengan aplikasi seperti **Sideloadly**, **AltStore**, atau **TrollStore** (jika jailbreak). Tidak bisa diklik langsung dari Safari!
+          append_body: true
+          files: |
+            build/ios/iphoneos/runa-app-*-ios-unsigned.ipa
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
