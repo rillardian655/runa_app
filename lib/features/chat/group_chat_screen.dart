@@ -121,7 +121,15 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
         .collection('users')
         .doc(senderId)
         .get();
-    final name = (doc.exists ? doc.data()?['username'] as String? : null) ?? 'Unknown';
+    
+    String name = 'Unknown';
+    if (doc.exists) {
+      final data = doc.data() as Map<String, dynamic>?;
+      if (data != null && data.containsKey('username')) {
+        name = data['username'] as String? ?? 'Unknown';
+      }
+    }
+    
     _nameCache[senderId] = name;
     return name;
   }
