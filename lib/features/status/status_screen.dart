@@ -141,7 +141,7 @@ class _StatusScreenState extends State<StatusScreen> {
       future: context.read<AuthService>().getUserData(uid),
       builder: (context, snap) {
         final username = snap.data?['username'] ?? 'Saya';
-        final photoUrl = snap.data?['photoUrl'] ?? '';
+        final photoUrl = snap.data?['photo_url'] ?? '';
 
         return ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),

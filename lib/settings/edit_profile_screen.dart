@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:runa_app/core/services/auth_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:runa_app/core/utils/image_helper.dart';
+import 'package:runa_app/core/services/storage_service.dart';
 import 'package:go_router/go_router.dart';
 
 class EditProfileScreen extends StatefulWidget {
@@ -131,13 +132,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       String bannerUrl = _currentBannerUrl;
 
       if (_profileImage != null) {
-        final url = await _uploadImageAsBase64(_profileImage!);
-        if (url != null) photoUrl = url;
+        if (kIsWeb) {
+          final url = await _uploadImageAsBase64(_profileImage!);
+          if (url != null) photoUrl = url;
+        } else {
+          final url = await StorageService().uploadAvatar(File(_profileImage!.path), user.uid);
+          if (url != null) photoUrl = url;
+        }
       }
 
       if (_bannerImage != null) {
-        final url = await _uploadImageAsBase64(_bannerImage!);
-        if (url != null) bannerUrl = url;
+        if (kIsWeb) {
+          final url = await _uploadImageAsBase64(_bannerImage!);
+          if (url != null) bannerUrl = url;
+        } else {
+          final url = await StorageService().uploadFile(File(_bannerImage!.path), 'banners/${user.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
+          if (url != null) bannerUrl = url;
+        }
       }
 
       final updateData = <String, dynamic>{

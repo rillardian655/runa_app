@@ -86,10 +86,14 @@ class StatusService {
     final expiresAt = now.add(const Duration(hours: 24));
 
     final fileName = '${uid}_${now.millisecondsSinceEpoch}.mp4';
-    final bytes = await videoFile.readAsBytes();
-
     final ref = _storage.ref().child('status_media').child(fileName);
-    await ref.putData(bytes, SettableMetadata(contentType: 'video/mp4'));
+    
+    if (kIsWeb) {
+      final bytes = await videoFile.readAsBytes();
+      await ref.putData(bytes, SettableMetadata(contentType: 'video/mp4'));
+    } else {
+      await ref.putFile(File(videoFile.path), SettableMetadata(contentType: 'video/mp4'));
+    }
     final videoUrl = await ref.getDownloadURL();
 
     await _firestore.collection('statuses').add({
