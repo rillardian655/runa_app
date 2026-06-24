@@ -63,7 +63,7 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
     final navigator = Navigator.of(context);
 
     // Fetch username and photo_url from Firebase
-    final userDoc = await auth.getUserData(user.id);
+    final userDoc = await auth.getUserData(user.uid);
     final username = userDoc?['username'] ?? user.email?.split('@')[0] ?? 'User';
     final photoUrl = userDoc?['photo_url'] ?? '';
 
@@ -72,7 +72,7 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
     try {
       if (_selectedVideo != null) {
         await _statusService.postVideoStatus(
-          uid: user.id,
+          uid: user.uid,
           username: username,
           photoUrl: photoUrl,
           videoFile: _selectedVideo!,
@@ -80,7 +80,7 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
         );
       } else if (_selectedImage != null) {
         await _statusService.postImageStatus(
-          uid: user.id,
+          uid: user.uid,
           username: username,
           photoUrl: photoUrl,
           imageFile: _selectedImage!,
@@ -95,7 +95,7 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
           return;
         }
         await _statusService.postTextStatus(
-          uid: user.id,
+          uid: user.uid,
           username: username,
           photoUrl: photoUrl,
           content: _textController.text.trim(),

@@ -28,7 +28,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   @override
   void initState() {
     super.initState();
-    final uid = context.read<AuthService>().currentUser?.id ?? '';
+    final uid = context.read<AuthService>().currentUser?.uid ?? '';
     _chatStream = _chatService.getRecentChats(uid);
     _groupStream = _groupService.getUserGroups(uid);
     _statusStream = _statusService.getPublicStatuses(uid);
@@ -141,7 +141,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
                             if (item['type'] == 'group') {
                               return _buildGroupTile(item);
                             } else {
-                              return _buildChatTile(item, currentUser.id, statusGroups);
+                              return _buildChatTile(item, currentUser.uid, statusGroups);
                             }
                           },
                         );

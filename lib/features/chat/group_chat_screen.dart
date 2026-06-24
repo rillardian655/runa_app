@@ -60,7 +60,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   void initState() {
     super.initState();
     _fetchGroupDetails();
-    final uid = context.read<AuthService>().currentUser?.id;
+    final uid = context.read<AuthService>().currentUser?.uid;
     if (uid != null) {
       _typingService.subscribe(widget.groupId, uid);
       _fetchMyName(uid);
@@ -532,7 +532,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
   }
 
   void _showAttachmentBottomSheet(BuildContext context) {
-    final currentUid = context.read<AuthService>().currentUser?.id;
+    final currentUid = context.read<AuthService>().currentUser?.uid;
     if (currentUid == null) return;
 
     showModalBottomSheet(
@@ -655,7 +655,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final data = messages[index];
-                    final isMe = data['sender_id'] == currentUser.id;
+                    final isMe = data['sender_id'] == currentUser.uid;
                     final senderId = data['sender_id'] as String;
                     final type = data['type'] as String? ?? 'text';
                     final isAudio = type == 'audio';
@@ -679,7 +679,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
 
                             return GestureDetector(
                               onLongPress: () => _showMessageActions(
-                                  currentUser.id, data, text),
+                                  currentUser.uid, data, text),
                               child: Align(
                                 alignment: isMe
                                     ? Alignment.centerRight
@@ -801,7 +801,7 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(8.0),
-              child: _buildInputRow(currentUser.id),
+              child: _buildInputRow(currentUser.uid),
             ),
           ),
         ],

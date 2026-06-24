@@ -65,7 +65,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _fetchFriendName();
     // Mark this conversation as open so its incoming messages don't trigger a
     // notification while the user is reading it.
-    final uid = context.read<AuthService>().currentUser?.id;
+    final uid = context.read<AuthService>().currentUser?.uid;
     if (uid != null) {
       _chatId = _chatService.getChatId(uid, widget.userId);
       NotificationService.activeChatId = _chatId;
@@ -794,7 +794,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _showAttachmentBottomSheet(BuildContext context) {
-    final currentUid = context.read<AuthService>().currentUser?.id;
+    final currentUid = context.read<AuthService>().currentUser?.uid;
     if (currentUid == null) return;
 
     showModalBottomSheet(
@@ -940,8 +940,8 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
 
-    final chatId = _chatService.getChatId(currentUser.id, widget.userId);
-    _chatService.markMessagesAsRead(chatId, currentUser.id, widget.userId);
+    final chatId = _chatService.getChatId(currentUser.uid, widget.userId);
+    _chatService.markMessagesAsRead(chatId, currentUser.uid, widget.userId);
 
     return Scaffold(
       appBar: AppBar(
@@ -981,7 +981,7 @@ class _ChatScreenState extends State<ChatScreen> {
             onPressed: () {
               context.push('/call', extra: {
                 'callId': '',
-                'currentUserId': currentUser.id,
+                'currentUserId': currentUser.uid,
                 'currentUserName': currentUser.userMetadata?['username'] ??
                     currentUser.email?.split('@')[0] ??
                     'User',
@@ -1016,7 +1016,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final data = messages[index];
-                    final isMe = data['sender_id'] == currentUser.id;
+                    final isMe = data['sender_id'] == currentUser.uid;
                     final type = data['type'] as String? ?? 'text';
                     final reactions = (data['reactions'] as Map?)
                         ?.cast<String, dynamic>();
@@ -1029,7 +1029,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
                         return GestureDetector(
                           onLongPress: () =>
-                              _showMessageActions(currentUser.id, data, text),
+                              _showMessageActions(currentUser.uid, data, text),
                           child: Align(
                             alignment: isMe
                                 ? Alignment.centerRight
@@ -1178,7 +1178,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildReplyBanner(),
-                  _buildInputRow(currentUser.id),
+                  _buildInputRow(currentUser.uid),
                 ],
               ),
             ),

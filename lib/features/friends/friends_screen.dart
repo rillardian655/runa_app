@@ -63,9 +63,9 @@ class _FriendsScreenState extends State<FriendsScreen>
           : TabBarView(
               controller: _tabController,
               children: [
-                _buildFriendsTab(currentUser.id),
-                _buildRequestsTab(currentUser.id),
-                _buildDiscoverTab(currentUser.id),
+                _buildFriendsTab(currentUser.uid),
+                _buildRequestsTab(currentUser.uid),
+                _buildDiscoverTab(currentUser.uid),
               ],
             ),
     );

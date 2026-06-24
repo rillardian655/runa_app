@@ -42,7 +42,7 @@ class _MainLayoutState extends State<MainLayout> {
     _pageController = PageController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startListeningForCalls();
-      final uid = context.read<AuthService>().currentUser?.id;
+      final uid = context.read<AuthService>().currentUser?.uid;
       if (uid != null) {
         _unreadStream = _chatService.getRecentChats(uid);
       }
@@ -56,7 +56,7 @@ class _MainLayoutState extends State<MainLayout> {
 
     _incomingCallSubscription?.cancel();
     _incomingCallSubscription = _signalingService
-        .listenForIncomingCalls(currentUser.id)
+        .listenForIncomingCalls(currentUser.uid)
         .listen((calls) {
       if (calls.isNotEmpty && !_isShowingIncomingCall) {
         final callData = calls.first;
@@ -101,7 +101,7 @@ class _MainLayoutState extends State<MainLayout> {
             NotificationService.instance.cancelCallNotification(callId);
             context.push('/call', extra: {
               'callId': callId,
-              'currentUserId': currentUser.id,
+              'currentUserId': currentUser.uid,
               'currentUserName': currentUser.userMetadata?['username'] ??
                   currentUser.email?.split('@')[0] ??
                   'User',

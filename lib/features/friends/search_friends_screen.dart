@@ -46,7 +46,7 @@ class _SearchFriendsScreenState extends State<SearchFriendsScreen> {
       final results = await _friendService.searchUsers(query);
       
       final authService = context.read<AuthService>();
-      final currentUid = authService.currentUser?.id;
+      final currentUid = authService.currentUser?.uid;
       
       final filteredResults = results.where((user) => user['uid'] != currentUid).toList();
 
@@ -84,7 +84,7 @@ class _SearchFriendsScreenState extends State<SearchFriendsScreen> {
     if (currentUser == null) return;
 
     try {
-      await _friendService.addFriendByUid(currentUser.id, targetUid);
+      await _friendService.addFriendByUid(currentUser.uid, targetUid);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Permintaan pertemanan terkirim ke @$username!')),

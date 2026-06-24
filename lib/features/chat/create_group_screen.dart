@@ -49,7 +49,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     try {
       final groupId = await _groupService.createGroup(
         name: _groupNameController.text.trim(),
-        creatorId: currentUser.id,
+        creatorId: currentUser.uid,
         memberIds: _selectedMembers.toList(),
       );
 
@@ -131,7 +131,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
           // Friends list
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _friendService.getFriends(currentUser.id),
+              stream: _friendService.getFriends(currentUser.uid),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
