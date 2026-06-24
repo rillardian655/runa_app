@@ -72,3 +72,27 @@ key.properties
 *.jks.old
 *.keystore
 keystore_base64.txt
+
+# Sensitive credentials
+firebase-admin-key.json
+supabase_keys.txt
+*.env
+.env.*
+
+# coturn / TURN secrets — never commit a filled-in copy
+cloudflare.ini
+*.secret
+deploy/coturn/turnserver.local.conf
+deploy/coturn/install.local.sh
+
+# One-off admin/migration scripts — contain live credentials, keep out of git
+ssh_migration.py
+migrate_users.js
+run_migration.js
+
+# Node modules
+node_modules/
+package-lock.json
+
+# Claude Code / local agent tooling
+.claude/

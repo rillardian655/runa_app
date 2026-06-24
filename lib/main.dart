@@ -1,48 +1,107 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:runa_app/firebase_options.dart';
 import 'package:provider/provider.dart';
 import 'package:runa_app/app/routes.dart';
 import 'package:runa_app/app/theme.dart';
 import 'package:runa_app/core/services/auth_service.dart';
-import 'package:runa_app/core/services/notification_service.dart';
-import 'package:runa_app/firebase_options.dart';
+import 'package:runa_app/core/services/theme_service.dart';
+import 'package:runa_app/core/services/app_update_service.dart';
+import 'package:runa_app/features/call/dynamic_island.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    debugPrint("Firebase not initialized yet or config missing: $e");
-  }
 
-  // Wajib didaftarkan SETELAH Firebase.initializeApp() untuk mencegah error
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
 
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProvider(create: (_) => ThemeService()),
       ],
       child: const RunaApp(),
     ),
   );
 }
 
-class RunaApp extends StatelessWidget {
+class RunaApp extends StatefulWidget {
   const RunaApp({super.key});
 
   @override
+  State<RunaApp> createState() => _RunaAppState();
+}
+
+class _RunaAppState extends State<RunaApp> with WidgetsBindingObserver {
+  bool _updateChecked = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Keep the user's online/last-seen status in sync with app visibility.
+    final auth = context.read<AuthService>();
+    if (state == AppLifecycleState.resumed) {
+      auth.setPresence('online');
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached) {
+      auth.setPresence('offline');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final themeMode = context.watch<ThemeService>().themeMode;
     return MaterialApp.router(
       title: 'Ru.na',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.system, // Or from SettingsProvider
+      themeMode: themeMode,
       routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
+      builder: (context, child) {
+        // Check for updates using a context below MaterialApp
+        if (!_updateChecked) {
+          _updateChecked = true;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _checkForUpdates(context);
+          });
+        }
+
+        return Stack(
+          children: [
+            child ?? const SizedBox.shrink(),
+            const DynamicIsland(),
+          ],
+        );
+      },
     );
+  }
+
+  Future<void> _checkForUpdates(BuildContext context) async {
+    try {
+      final updateInfo = await AppUpdateService.checkForUpdate();
+      if (updateInfo != null && mounted) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted && context.mounted) {
+          AppUpdateService.showUpdateDialog(context, updateInfo);
+        }
+      }
+    } catch (e) {
+      debugPrint('[RunaApp] Update check failed: $e');
+    }
   }
 }

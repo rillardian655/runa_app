@@ -4,18 +4,24 @@ import 'package:go_router/go_router.dart';
 import 'package:runa_app/features/auth/login_screen.dart';
 import 'package:runa_app/features/auth/register_screen.dart';
 import 'package:runa_app/features/layout/main_layout.dart';
-import 'package:runa_app/settings/edit_profile_screen.dart';
-import 'package:runa_app/features/friends/user_profile_screen.dart';
 import 'package:runa_app/features/chat/chat_screen.dart';
+import 'package:runa_app/features/chat/group_chat_screen.dart';
+import 'package:runa_app/features/chat/create_group_screen.dart';
+import 'package:runa_app/features/friends/user_profile_screen.dart';
+import 'package:runa_app/settings/settings_screen.dart';
+import 'package:runa_app/settings/edit_profile_screen.dart';
 import 'package:runa_app/features/call/call_screen.dart';
 import 'package:runa_app/features/friends/search_friends_screen.dart';
 import 'package:runa_app/features/status/add_status_screen.dart';
 
 final GoRouter appRouter = GoRouter(
-  initialLocation: FirebaseAuth.instance.currentUser == null ? '/login' : '/',
+  initialLocation:
+      FirebaseAuth.instance.currentUser == null ? '/login' : '/',
   redirect: (context, state) {
-    final isLoggedIn = FirebaseAuth.instance.currentUser != null;
-    final isGoingToLoginOrRegister = state.matchedLocation == '/login' || state.matchedLocation == '/register';
+    final isLoggedIn =
+        FirebaseAuth.instance.currentUser != null;
+    final isGoingToLoginOrRegister = state.matchedLocation == '/login' ||
+        state.matchedLocation == '/register';
 
     if (!isLoggedIn && !isGoingToLoginOrRegister) {
       return '/login';
@@ -59,7 +65,6 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/call',
       builder: (context, state) {
-        // Pass call params via 'extra'
         final params = state.extra as Map<String, dynamic>;
         return CallScreen(
           callId: params['callId'] ?? '',
@@ -78,6 +83,17 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       path: '/status/add',
       builder: (context, state) => const AddStatusScreen(),
+    ),
+    GoRoute(
+      path: '/group/:groupId',
+      builder: (context, state) {
+        final groupId = state.pathParameters['groupId']!;
+        return GroupChatScreen(groupId: groupId);
+      },
+    ),
+    GoRoute(
+      path: '/create_group',
+      builder: (context, state) => const CreateGroupScreen(),
     ),
   ],
 );

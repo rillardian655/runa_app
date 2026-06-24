@@ -1,149 +1,219 @@
 import 'dart:io';
-import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
-// Background message handler — harus top-level function (di luar class)
-@pragma('vm:entry-point')
-Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
-  debugPrint('Background message received: ${message.messageId}');
-}
+/// OneSignal App ID — khusus untuk kirim notifikasi background
+const String _kOneSignalAppId = '7b94f919-28fb-4379-bfda-ca4b5cf6ef85';
 
 class NotificationService {
-  final FirebaseMessaging _firebaseMessaging = FirebaseMessaging.instance;
+  NotificationService._();
+
+  static final NotificationService instance = NotificationService._();
+
+  FlutterLocalNotificationsPlugin? _localNotificationsPlugin;
+  bool _initialized = false;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  static final FlutterLocalNotificationsPlugin _localNotifications =
-      FlutterLocalNotificationsPlugin();
-
-  // Android notification channel — harus sama dengan channelId di functions/index.js
-  static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
-    'runa_chat_channel',
-    'Pesan Chat Runa',
-    description: 'Notifikasi untuk pesan chat baru di Runa App',
-    importance: Importance.max,
-    playSound: true,
-    enableVibration: true,
-  );
+  /// Chat id currently open on screen. Message notifications for this chat are
+  /// suppressed so the user isn't notified about the conversation they're in.
+  static String? activeChatId;
 
   Future<void> initialize(String userId) async {
-    // Setup local notifications & buat channel Android
-    await _setupLocalNotifications();
-
-    // Request permission notifikasi (iOS + Android 13+)
-    NotificationSettings settings = await _firebaseMessaging.requestPermission(
-      alert: true,
-      badge: true,
-      sound: true,
-      provisional: false,
-      announcement: false,
-      carPlay: false,
-      criticalAlert: false,
-    );
-
-    debugPrint('Notification status: ${settings.authorizationStatus}');
-
-    if (settings.authorizationStatus == AuthorizationStatus.authorized ||
-        settings.authorizationStatus == AuthorizationStatus.provisional) {
-      // Dapatkan FCM token
-      String? token;
-      if (kIsWeb) {
-        token = await _firebaseMessaging.getToken(
-          vapidKey: 'YOUR_PUBLIC_VAPID_KEY_HERE',
-        );
-      } else {
-        token = await _firebaseMessaging.getToken();
-      }
-
-      debugPrint('FCM Token: $token');
-
-      if (token != null) {
-        await _saveTokenToDatabase(userId, token);
-      }
-
-      // Update token jika di-refresh oleh Firebase
-      _firebaseMessaging.onTokenRefresh.listen((newToken) {
-        _saveTokenToDatabase(userId, newToken);
-      });
-
-      // Handle pesan saat app FOREGROUND → tampilkan local notification
-      FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-        debugPrint('Foreground message: ${message.notification?.title}');
-        _showLocalNotification(message);
-      });
-    } else {
-      debugPrint('Notification permission denied by user');
+    if (!kIsWeb && !Platform.isLinux && !_initialized) {
+      await _initLocalNotifications();
+      await _initOneSignal(userId);
+      _initialized = true;
     }
   }
 
-  Future<void> _setupLocalNotifications() async {
-    // Buat Android notification channel (wajib untuk Android 8.0+)
-    await _localNotifications
-        .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(_channel);
+  /// Inisialisasi OneSignal dan daftarkan player ID ke database
+  Future<void> _initOneSignal(String userId) async {
+    try {
+      OneSignal.initialize(_kOneSignalAppId);
 
-    // Request POST_NOTIFICATIONS permission (Android 13+)
-    if (!kIsWeb && Platform.isAndroid) {
-      await _localNotifications
+      // Minta izin notifikasi dari pengguna (Android 13+ / iOS)
+      await OneSignal.Notifications.requestPermission(true);
+
+      // Hubungkan OneSignal subscription dengan user ID kita
+      await OneSignal.login(userId);
+
+      // Ambil OneSignal Subscription ID (player ID) dan simpan ke database
+      final subscriptionId = OneSignal.User.pushSubscription.id;
+      if (subscriptionId != null && subscriptionId.isNotEmpty) {
+        debugPrint('[NotificationService] OneSignal ID: $subscriptionId');
+        await _saveTokenToDatabase(userId, subscriptionId);
+      }
+
+      // Listen jika subscription ID berubah (misalnya setelah reinstall)
+      OneSignal.User.pushSubscription.addObserver((state) {
+        final newId = state.current.id;
+        if (newId != null && newId.isNotEmpty) {
+          _saveTokenToDatabase(userId, newId);
+        }
+      });
+
+      // Handle notifikasi saat app di FOREGROUND (tampilkan sebagai lokal)
+      OneSignal.Notifications.addForegroundWillDisplayListener((event) {
+        // Biarkan OneSignal tampilkan notifikasi di foreground juga
+        event.notification.display();
+      });
+
+      // Handle ketika notifikasi di-tap
+      OneSignal.Notifications.addClickListener((event) {
+        final data = event.notification.additionalData;
+        if (data != null) {
+          final chatId = data['chatId'] as String?;
+          debugPrint('[NotificationService] Notif tapped, chatId: $chatId');
+          // TODO: navigasi ke chat screen berdasarkan chatId
+        }
+      });
+
+      debugPrint('[NotificationService] OneSignal initialized successfully');
+    } catch (e, st) {
+      debugPrint('[NotificationService] Failed to init OneSignal: $e\n$st');
+    }
+  }
+
+  Future<void> _initLocalNotifications() async {
+    try {
+      _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
+
+      const initializationSettingsAndroid =
+          AndroidInitializationSettings('@mipmap/launcher_icon');
+      const initializationSettingsIOS = DarwinInitializationSettings();
+      const initializationSettings = InitializationSettings(
+        android: initializationSettingsAndroid,
+        iOS: initializationSettingsIOS,
+      );
+
+      await _localNotificationsPlugin!.initialize(
+        initializationSettings,
+        onDidReceiveNotificationResponse: (NotificationResponse response) {
+          debugPrint('[NotificationService] Notification tapped: ${response.payload}');
+        },
+      );
+
+      final android = _localNotificationsPlugin!
           .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
+              AndroidFlutterLocalNotificationsPlugin>();
+      if (android != null) {
+        await android.requestNotificationsPermission();
+        await android.createNotificationChannel(const AndroidNotificationChannel(
+          'runa_chat_channel',
+          'Chat Messages',
+          description: 'Notifications for new chat messages',
+          importance: Importance.high,
+        ));
+        await android.createNotificationChannel(const AndroidNotificationChannel(
+          'runa_call_channel',
+          'Incoming Calls',
+          description: 'Notifications for incoming calls',
+          importance: Importance.max,
+        ));
+      }
+
+      debugPrint('[NotificationService] Local notifications initialized');
+    } catch (e, stackTrace) {
+      debugPrint('[NotificationService] Failed to initialize: $e');
+      debugPrint('[NotificationService] Stack: $stackTrace');
+      _localNotificationsPlugin = null;
     }
-
-    const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('launcher_icon');
-
-    const DarwinInitializationSettings iosSettings =
-        DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
-
-    const InitializationSettings initSettings = InitializationSettings(
-      android: androidSettings,
-      iOS: iosSettings,
-    );
-
-    await _localNotifications.initialize(initSettings);
   }
 
-  // Tampilkan notifikasi lokal saat app di foreground
-  void _showLocalNotification(RemoteMessage message) {
-    final notification = message.notification;
-    if (notification == null) return;
+  Future<void> showMessageNotification({
+    required String senderName,
+    required String message,
+    String? payload,
+  }) async {
+    if (_localNotificationsPlugin == null) return;
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'runa_chat_channel',
+        'Chat Messages',
+        channelDescription: 'Notifications for new chat messages',
+        importance: Importance.high,
+        priority: Priority.high,
+        showWhen: true,
+      );
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+      const details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+      await _localNotificationsPlugin!.show(
+        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        senderName,
+        message,
+        details,
+        payload: payload,
+      );
+    } catch (e, stackTrace) {
+      debugPrint('[NotificationService] Failed to show message notification: $e');
+      debugPrint('[NotificationService] Stack: $stackTrace');
+    }
+  }
 
-    _localNotifications.show(
-      notification.hashCode,
-      notification.title,
-      notification.body,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _channel.id,
-          _channel.name,
-          channelDescription: _channel.description,
-          importance: Importance.max,
-          priority: Priority.high,
-          playSound: true,
-          enableVibration: true,
-          icon: 'launcher_icon',
-        ),
-        iOS: const DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-        ),
-      ),
-    );
+  Future<void> showCallNotification({
+    required String callerName,
+    required String callId,
+  }) async {
+    if (_localNotificationsPlugin == null) return;
+    try {
+      const androidDetails = AndroidNotificationDetails(
+        'runa_call_channel',
+        'Incoming Calls',
+        channelDescription: 'Notifications for incoming calls',
+        importance: Importance.max,
+        priority: Priority.max,
+        fullScreenIntent: true,
+        showWhen: true,
+      );
+      const iosDetails = DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+      );
+      const details = NotificationDetails(
+        android: androidDetails,
+        iOS: iosDetails,
+      );
+      await _localNotificationsPlugin!.show(
+        callId.hashCode,
+        'Incoming Call',
+        '$callerName is calling...',
+        details,
+        payload: 'call:$callId',
+      );
+    } catch (e, stackTrace) {
+      debugPrint('[NotificationService] Failed to show call notification: $e');
+      debugPrint('[NotificationService] Stack: $stackTrace');
+    }
+  }
+
+  /// Dismiss the incoming-call notification once the call is answered, rejected
+  /// or it stops ringing.
+  Future<void> cancelCallNotification(String callId) async {
+    try {
+      await _localNotificationsPlugin?.cancel(callId.hashCode);
+    } catch (e) {
+      debugPrint('[NotificationService] Failed to cancel call notification: $e');
+    }
   }
 
   Future<void> _saveTokenToDatabase(String userId, String token) async {
-    await _firestore.collection('users').doc(userId).set(
-      {'fcmToken': token},
-      SetOptions(merge: true),
-    );
-    debugPrint('FCM token saved for user: $userId');
+    try {
+      await _firestore.collection('users').doc(userId).update({
+        'fcm_token': token,
+        'updated_at': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      debugPrint('[NotificationService] Failed to save token: $e');
+    }
   }
 }

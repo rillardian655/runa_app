@@ -18,6 +18,7 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
   bool _isLoading = false;
   int _selectedBgColorIndex = 0;
   XFile? _selectedImage;
+  XFile? _selectedVideo;
 
   final List<Color> _bgColors = [
     const Color(0xFF1A1A2E),
@@ -34,7 +35,21 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
     final picker = ImagePicker();
     final image = await picker.pickImage(source: ImageSource.gallery, imageQuality: 60);
     if (image != null) {
-      setState(() => _selectedImage = image);
+      setState(() {
+        _selectedImage = image;
+        _selectedVideo = null;
+      });
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    final picker = ImagePicker();
+    final video = await picker.pickVideo(source: ImageSource.gallery, maxDuration: const Duration(seconds: 30));
+    if (video != null) {
+      setState(() {
+        _selectedVideo = video;
+        _selectedImage = null;
+      });
     }
   }
 
@@ -47,17 +62,25 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    // Fetch username and photoUrl from Firestore
-    final userDoc = await auth.getUserData(user.uid);
+    // Fetch username and photo_url from Firebase
+    final userDoc = await auth.getUserData(user.id);
     final username = userDoc?['username'] ?? user.email?.split('@')[0] ?? 'User';
-    final photoUrl = userDoc?['photoUrl'] ?? '';
+    final photoUrl = userDoc?['photo_url'] ?? '';
 
     setState(() => _isLoading = true);
 
     try {
-      if (_selectedImage != null) {
+      if (_selectedVideo != null) {
+        await _statusService.postVideoStatus(
+          uid: user.id,
+          username: username,
+          photoUrl: photoUrl,
+          videoFile: _selectedVideo!,
+          caption: _textController.text.trim().isNotEmpty ? _textController.text.trim() : null,
+        );
+      } else if (_selectedImage != null) {
         await _statusService.postImageStatus(
-          uid: user.uid,
+          uid: user.id,
           username: username,
           photoUrl: photoUrl,
           imageFile: _selectedImage!,
@@ -66,13 +89,13 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
       } else {
         if (_textController.text.trim().isEmpty) {
           messenger.showSnackBar(
-            const SnackBar(content: Text('Tulis status dulu ya!')),
+            const SnackBar(content: Text('Write something for your status!')),
           );
           setState(() => _isLoading = false);
           return;
         }
         await _statusService.postTextStatus(
-          uid: user.uid,
+          uid: user.id,
           username: username,
           photoUrl: photoUrl,
           content: _textController.text.trim(),
@@ -83,7 +106,7 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
     } catch (e) {
       if (mounted) {
         messenger.showSnackBar(
-          SnackBar(content: Text('Gagal posting status: $e')),
+          SnackBar(content: Text('Failed to post status: $e')),
         );
       }
     } finally {
@@ -106,12 +129,12 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Buat Status'),
+        title: const Text('Create Status'),
         actions: [
           if (!_isLoading)
             TextButton(
               onPressed: _postStatus,
-              child: const Text('Kirim', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+              child: const Text('Post', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             )
           else
             const Padding(
@@ -124,7 +147,63 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
         children: [
           // --- Preview Area ---
           Expanded(
-            child: _selectedImage != null
+            child: _selectedVideo != null
+                ? Stack(
+                    children: [
+                      Center(
+                        child: Container(
+                          height: MediaQuery.of(context).size.height * 0.5,
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.videocam, color: Colors.white, size: 64),
+                                SizedBox(height: 12),
+                                Text('Video selected', style: TextStyle(color: Colors.white70, fontSize: 16)),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        top: 16,
+                        right: 16,
+                        child: CircleAvatar(
+                          backgroundColor: Colors.black54,
+                          child: IconButton(
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            onPressed: () => setState(() => _selectedVideo = null),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: Container(
+                          color: Colors.black54,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          child: TextField(
+                            controller: _textController,
+                            maxLines: 3,
+                            minLines: 1,
+                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                            decoration: const InputDecoration(
+                              hintText: 'Add a caption...',
+                              hintStyle: TextStyle(color: Colors.white54),
+                              border: InputBorder.none,
+                            ),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : _selectedImage != null
                 ? Stack(
                     children: [
                       Center(
@@ -163,7 +242,7 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
                             minLines: 1,
                             style: const TextStyle(color: Colors.white, fontSize: 16),
                             decoration: const InputDecoration(
-                              hintText: 'Tambah keterangan...',
+                              hintText: 'Add a caption...',
                               hintStyle: TextStyle(color: Colors.white54),
                               border: InputBorder.none,
                             ),
@@ -191,7 +270,7 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
                         fontWeight: FontWeight.bold,
                       ),
                       decoration: const InputDecoration(
-                        hintText: 'Tulis status kamu...',
+                        hintText: 'Write your status...',
                         hintStyle: TextStyle(color: Colors.white38, fontSize: 24),
                         border: InputBorder.none,
                       ),
@@ -207,7 +286,7 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
             child: Column(
               children: [
                 // Color picker row (only for text)
-                if (_selectedImage == null) ...[
+                if (_selectedImage == null && _selectedVideo == null) ...[
                   SizedBox(
                     height: 40,
                     child: ListView.builder(
@@ -239,18 +318,33 @@ class _AddStatusScreenState extends State<AddStatusScreen> {
                   ),
                   const SizedBox(height: 12),
                 ],
-                // Add image button
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _pickImage,
-                    icon: const Icon(Icons.image_outlined),
-                    label: const Text('Tambah Foto'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                // Add media buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pickImage,
+                        icon: const Icon(Icons.image_outlined),
+                        label: const Text('Photo'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _pickVideo,
+                        icon: const Icon(Icons.videocam_outlined),
+                        label: const Text('Video'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

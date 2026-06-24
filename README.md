@@ -1,17 +1,4 @@
-# runa_app
+this is used for updating the app via user notification in case of broken subdomain
 
-A new Flutter project.
 
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+youre probably here because you want to snoop around and find an api key, tbh theres a lot of security vulnerability and i know, this is just temporary till i can get the signaling working and buy a better vps

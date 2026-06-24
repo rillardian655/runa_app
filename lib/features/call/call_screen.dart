@@ -1,13 +1,10 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:iconsax/iconsax.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'package:runa_app/core/services/call_service.dart';
-import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'package:runa_app/core/services/call_session_controller.dart';
 
 class CallScreen extends StatefulWidget {
-  final String callId;        // Firestore doc ID (for incoming) or empty for outgoing
+  final String callId;
   final String currentUserId;
   final String currentUserName;
   final String friendUserId;
@@ -29,230 +26,177 @@ class CallScreen extends StatefulWidget {
 }
 
 class _CallScreenState extends State<CallScreen> {
-  final CallService _callService = CallService();
-  String _callStatus = 'Connecting...';
-  bool _isMuted = false;
-  bool _isSpeaker = false;
-  bool _isConnected = false;
-  Timer? _durationTimer;
-  int _callDurationSeconds = 0;
-  bool _isDisposed = false;
+  final CallSessionController _controller = CallSessionController.instance;
+  bool _closed = false;
+  bool _errorShown = false;
 
   @override
   void initState() {
     super.initState();
-    _initCall();
+    _controller.addListener(_onControllerChange);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _ensureStarted());
   }
 
-  Future<void> _initCall() async {
-    try {
-      // Minta izin mikrofon dan kamera
-      var status = await [Permission.microphone, Permission.camera].request();
-      if (status[Permission.microphone] != PermissionStatus.granted) {
-        throw Exception('Izin Mikrofon diperlukan untuk menelepon');
-      }
-
-      await _callService.initRenderers();
-
-      _callService.onCallEnded = () {
-        if (!_isDisposed && mounted) {
-          _endCallAndGoBack();
-        }
-      };
-
-      _callService.onCallAccepted = () {
-        if (!mounted) return;
-        setState(() {
-          _callStatus = 'Connected';
-          _isConnected = true;
-          _startDurationTimer();
-        });
-      };
-
-      _callService.onConnectionStateChanged = (RTCIceConnectionState state) {
-        if (!mounted) return;
-        setState(() {
-          switch (state) {
-            case RTCIceConnectionState.RTCIceConnectionStateConnected:
-            case RTCIceConnectionState.RTCIceConnectionStateCompleted:
-              _callStatus = 'Connected';
-              _isConnected = true;
-              _startDurationTimer();
-              break;
-            case RTCIceConnectionState.RTCIceConnectionStateDisconnected:
-              _callStatus = 'Reconnecting...';
-              break;
-            case RTCIceConnectionState.RTCIceConnectionStateFailed:
-            case RTCIceConnectionState.RTCIceConnectionStateClosed:
-              _callStatus = 'Call Ended';
-              _endCallAndGoBack();
-              break;
-            default:
-              break;
-          }
-        });
-      };
-
-      if (widget.isIncoming) {
-        // Callee: answer the existing call
-        setState(() => _callStatus = 'Answering...');
-        await _callService.answerCall(widget.callId);
-      } else {
-        // Caller: start a new call
-        setState(() => _callStatus = 'Ringing...');
-        await _callService.startCallToUser(
-          callerId: widget.currentUserId,
-          callerName: widget.currentUserName,
-          receiverId: widget.friendUserId,
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() => _callStatus = 'Failed to connect');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Call error: $e')),
-        );
-        Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) _endCallAndGoBack();
-        });
-      }
+  Future<void> _ensureStarted() async {
+    if (_controller.hasActiveCall) {
+      // Re-opened from the island: just hide the island while we're on screen.
+      _controller.maximize();
+      return;
     }
+    await _controller.start(
+      callId: widget.callId,
+      currentUserId: widget.currentUserId,
+      currentUserName: widget.currentUserName,
+      friendUserId: widget.friendUserId,
+      friendName: widget.friendName,
+      isIncoming: widget.isIncoming,
+      isVideo: false,
+    );
   }
 
-  void _startDurationTimer() {
-    _durationTimer?.cancel();
-    _durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (mounted) {
-        setState(() {
-          _callDurationSeconds++;
-        });
-      }
-    });
-  }
+  void _onControllerChange() {
+    if (!mounted || _closed) return;
 
-  String _formatDuration(int totalSeconds) {
-    final minutes = (totalSeconds ~/ 60).toString().padLeft(2, '0');
-    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
-  }
-
-  void _endCallAndGoBack() async {
-    if (_isDisposed) return;
-    _isDisposed = true;
-    _durationTimer?.cancel();
-    try {
-      await _callService.endCall();
-    } catch (e) {
-      debugPrint('Error ending call: $e');
+    final error = _controller.error;
+    if (error != null && !_errorShown) {
+      _errorShown = true;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Call error: $error')),
+      );
     }
-    if (mounted) {
-      context.pop();
+
+    // The call ended (remote hang-up, failure, or hang-up from the island).
+    if (!_controller.hasActiveCall) {
+      _closed = true;
+      if (context.canPop()) context.pop();
     }
   }
 
   @override
   void dispose() {
-    _durationTimer?.cancel();
-    if (!_isDisposed) {
-      _isDisposed = true;
-      _callService.endCall();
-    }
+    // Do NOT end the call here — the controller owns its lifecycle so the call
+    // can keep running while minimized into the island.
+    _controller.removeListener(_onControllerChange);
     super.dispose();
+  }
+
+  void _minimizeAndClose() {
+    if (_closed) return;
+    _closed = true;
+    _controller.minimize();
+    if (context.canPop()) context.pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      body: SafeArea(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Spacer(flex: 2),
-            // Profile avatar
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: _isConnected ? Colors.greenAccent : Colors.blueAccent,
-                  width: 3,
-                ),
-              ),
-              child: const CircleAvatar(
-                radius: 55,
-                backgroundColor: Colors.blueAccent,
-                child: Icon(Icons.person, size: 55, color: Colors.white),
-              ),
-            ),
-            const SizedBox(height: 24),
-            // Friend name
-            Text(
-              widget.friendName,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 26,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Status or duration
-            Text(
-              _isConnected ? _formatDuration(_callDurationSeconds) : _callStatus,
-              style: TextStyle(
-                color: _isConnected ? Colors.greenAccent : Colors.white70,
-                fontSize: 16,
-                fontWeight: _isConnected ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-            const Spacer(flex: 3),
-            // Control buttons
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40.0, vertical: 40.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _minimizeAndClose();
+      },
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) {
+          final connected = _controller.isConnected;
+          return Scaffold(
+            backgroundColor: const Color(0xFF1A1A2E),
+            body: SafeArea(
+              child: Column(
                 children: [
-                  // Mute button
-                  _buildCallButton(
-                    icon: _isMuted ? Iconsax.microphone_slash : Iconsax.microphone,
-                    color: _isMuted ? Colors.white : Colors.white24,
-                    iconColor: _isMuted ? Colors.black : Colors.white,
-                    label: _isMuted ? 'Unmute' : 'Mute',
-                    onTap: () {
-                      _callService.toggleMute();
-                      setState(() {
-                        _isMuted = _callService.isMuted;
-                      });
-                    },
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: IconButton(
+                      icon: const Icon(Icons.keyboard_arrow_down,
+                          color: Colors.white, size: 32),
+                      tooltip: 'Minimize',
+                      onPressed: _minimizeAndClose,
+                    ),
                   ),
-                  // Hang up button
-                  _buildCallButton(
-                    icon: Icons.call_end,
-                    color: Colors.redAccent,
-                    iconColor: Colors.white,
-                    size: 68,
-                    label: 'End',
-                    onTap: _endCallAndGoBack,
+                  const Spacer(flex: 2),
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: connected ? Colors.greenAccent : Colors.blueAccent,
+                        width: 3,
+                      ),
+                    ),
+                    child: const CircleAvatar(
+                      radius: 55,
+                      backgroundColor: Colors.blueAccent,
+                      child: Icon(Icons.person, size: 55, color: Colors.white),
+                    ),
                   ),
-                  // Speaker button
-                  _buildCallButton(
-                    icon: _isSpeaker ? Icons.volume_up : Icons.volume_down,
-                    color: _isSpeaker ? Colors.white : Colors.white24,
-                    iconColor: _isSpeaker ? Colors.black : Colors.white,
-                    label: _isSpeaker ? 'Speaker' : 'Speaker',
-                    onTap: () {
-                      _callService.toggleSpeaker();
-                      setState(() {
-                        _isSpeaker = _callService.isSpeakerOn;
-                      });
-                    },
+                  const SizedBox(height: 24),
+                  Text(
+                    _controller.friendName.isNotEmpty
+                        ? _controller.friendName
+                        : widget.friendName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
+                  const SizedBox(height: 12),
+                  Text(
+                    _controller.statusLabel,
+                    style: TextStyle(
+                      color: connected ? Colors.greenAccent : Colors.white70,
+                      fontSize: 16,
+                      fontWeight: connected ? FontWeight.bold : FontWeight.normal,
+                    ),
+                  ),
+                  const Spacer(flex: 3),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 40.0, vertical: 40.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _buildCallButton(
+                          icon: _controller.isMuted
+                              ? Iconsax.microphone_slash
+                              : Iconsax.microphone,
+                          color: _controller.isMuted
+                              ? Colors.white
+                              : Colors.white24,
+                          iconColor:
+                              _controller.isMuted ? Colors.black : Colors.white,
+                          label: _controller.isMuted ? 'Unmute' : 'Mute',
+                          onTap: _controller.toggleMute,
+                        ),
+                        _buildCallButton(
+                          icon: Icons.call_end,
+                          color: Colors.redAccent,
+                          iconColor: Colors.white,
+                          size: 68,
+                          label: 'End',
+                          onTap: _controller.end,
+                        ),
+                        _buildCallButton(
+                          icon: _controller.isSpeakerOn
+                              ? Icons.volume_up
+                              : Icons.volume_down,
+                          color: _controller.isSpeakerOn
+                              ? Colors.white
+                              : Colors.white24,
+                          iconColor: _controller.isSpeakerOn
+                              ? Colors.black
+                              : Colors.white,
+                          label: 'Speaker',
+                          onTap: _controller.toggleSpeaker,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
                 ],
               ),
             ),
-            const SizedBox(height: 20),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

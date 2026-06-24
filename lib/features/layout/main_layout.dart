@@ -5,6 +5,7 @@ import 'package:iconsax/iconsax.dart';
 import 'package:provider/provider.dart';
 import 'package:runa_app/core/services/auth_service.dart';
 import 'package:runa_app/core/services/chat_service.dart';
+import 'package:runa_app/core/services/notification_service.dart';
 import 'package:runa_app/core/services/signaling_service.dart';
 import 'package:runa_app/features/call/incoming_call_overlay.dart';
 import 'package:runa_app/features/chat/chat_list_screen.dart';
@@ -21,10 +22,12 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _currentIndex = 0;
-  late PageController _pageController;
   StreamSubscription? _incomingCallSubscription;
   final SignalingService _signalingService = SignalingService();
+  final ChatService _chatService = ChatService();
   bool _isShowingIncomingCall = false;
+  late PageController _pageController;
+  Stream<List<Map<String, dynamic>>>? _unreadStream;
 
   final List<Widget> _pages = const [
     ChatListScreen(),
@@ -36,9 +39,13 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(initialPage: _currentIndex);
+    _pageController = PageController();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startListeningForCalls();
+      final uid = context.read<AuthService>().currentUser?.id;
+      if (uid != null) {
+        _unreadStream = _chatService.getRecentChats(uid);
+      }
     });
   }
 
@@ -49,15 +56,22 @@ class _MainLayoutState extends State<MainLayout> {
 
     _incomingCallSubscription?.cancel();
     _incomingCallSubscription = _signalingService
-        .listenForIncomingCalls(currentUser.uid)
-        .listen((snapshot) {
-      if (snapshot.docs.isNotEmpty && !_isShowingIncomingCall) {
-        final callDoc = snapshot.docs.first;
-        final data = callDoc.data() as Map<String, dynamic>;
+        .listenForIncomingCalls(currentUser.id)
+        .listen((calls) {
+      if (calls.isNotEmpty && !_isShowingIncomingCall) {
+        final callData = calls.first;
+        final callId = callData['id'] as String;
+        final callerName = (callData['caller_name'] ?? 'Unknown') as String;
+        // Post a system call notification so an incoming call is visible even
+        // when the app isn't in the foreground (heads-up / lock screen).
+        NotificationService.instance.showCallNotification(
+          callerName: callerName,
+          callId: callId,
+        );
         _showIncomingCallDialog(
-          callId: callDoc.id,
-          callerName: data['callerName'] ?? 'Unknown',
-          callerId: data['callerId'] ?? '',
+          callId: callId,
+          callerName: callerName,
+          callerId: callData['caller_id'] ?? '',
         );
       }
     });
@@ -84,10 +98,13 @@ class _MainLayoutState extends State<MainLayout> {
           onAccept: () {
             Navigator.of(dialogContext).pop();
             _isShowingIncomingCall = false;
+            NotificationService.instance.cancelCallNotification(callId);
             context.push('/call', extra: {
               'callId': callId,
-              'currentUserId': currentUser.uid,
-              'currentUserName': currentUser.displayName ?? currentUser.email?.split('@')[0] ?? 'User',
+              'currentUserId': currentUser.id,
+              'currentUserName': currentUser.userMetadata?['username'] ??
+                  currentUser.email?.split('@')[0] ??
+                  'User',
               'friendUserId': callerId,
               'friendName': callerName,
               'isIncoming': true,
@@ -96,6 +113,7 @@ class _MainLayoutState extends State<MainLayout> {
           onReject: () async {
             Navigator.of(dialogContext).pop();
             _isShowingIncomingCall = false;
+            NotificationService.instance.cancelCallNotification(callId);
             await _signalingService.rejectCall(callId);
           },
         );
@@ -107,9 +125,22 @@ class _MainLayoutState extends State<MainLayout> {
 
   @override
   void dispose() {
-    _pageController.dispose();
     _incomingCallSubscription?.cancel();
+    _pageController.dispose();
     super.dispose();
+  }
+
+  void _onTabTapped(int index) {
+    setState(() => _currentIndex = index);
+    _pageController.animateToPage(
+      index,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _onPageChanged(int index) {
+    setState(() => _currentIndex = index);
   }
 
   @override
@@ -120,15 +151,11 @@ class _MainLayoutState extends State<MainLayout> {
     return Scaffold(
       body: PageView(
         controller: _pageController,
-        onPageChanged: (index) {
-          setState(() => _currentIndex = index);
-        },
+        onPageChanged: _onPageChanged,
         children: _pages,
       ),
       bottomNavigationBar: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: currentUser != null
-            ? ChatService().getRecentChats(currentUser.uid)
-            : const Stream.empty(),
+        stream: _unreadStream ?? const Stream.empty(),
         builder: (context, snapshot) {
           int totalUnread = 0;
           if (snapshot.hasData) {
@@ -139,14 +166,7 @@ class _MainLayoutState extends State<MainLayout> {
 
           return BottomNavigationBar(
             currentIndex: _currentIndex,
-            onTap: (index) {
-              setState(() => _currentIndex = index);
-              _pageController.animateToPage(
-                index,
-                duration: const Duration(milliseconds: 300),
-                curve: Curves.easeInOut,
-              );
-            },
+            onTap: _onTabTapped,
             type: BottomNavigationBarType.fixed,
             items: [
               BottomNavigationBarItem(

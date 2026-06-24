@@ -20,15 +20,20 @@ class _StatusScreenState extends State<StatusScreen> {
   void initState() {
     super.initState();
     // Clean up expired statuses on screen load
-    _statusService.cleanupExpiredStatuses();
+    _statusService.cleanupExpiredStatuses().catchError((e) {
+      debugPrint('Error cleaning up statuses: $e');
+    });
   }
 
   void _openViewer(BuildContext context, List<Map<String, dynamic>> statuses,
       String ownerName, String ownerPhotoUrl, String currentUid, bool isOwn) {
     // Mark all as viewed
     for (final s in statuses) {
-      if (!(s['viewedBy'] as List).contains(currentUid)) {
-        _statusService.markAsViewed(s['id'], currentUid);
+      final viewedBy = (s['viewed_by'] as List?) ?? const [];
+      if (!viewedBy.contains(currentUid)) {
+        _statusService.markAsViewed(s['id'], currentUid).catchError((e) {
+          debugPrint('Error marking status as viewed: $e');
+        });
       }
     }
     Navigator.of(context).push(MaterialPageRoute(
@@ -54,7 +59,7 @@ class _StatusScreenState extends State<StatusScreen> {
         title: const Text('Status'),
       ),
       body: StreamBuilder<List<Map<String, dynamic>>>(
-        stream: _statusService.getPublicStatuses(currentUser.uid),
+        stream: _statusService.getPublicStatuses(currentUser.id),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -74,8 +79,8 @@ class _StatusScreenState extends State<StatusScreen> {
           }
 
           final groups = snapshot.data ?? [];
-          final ownGroup = groups.where((g) => g['uid'] == currentUser.uid).firstOrNull;
-          final otherGroups = groups.where((g) => g['uid'] != currentUser.uid).toList();
+          final ownGroup = groups.where((g) => g['uid'] == currentUser.id).firstOrNull;
+          final otherGroups = groups.where((g) => g['uid'] != currentUser.id).toList();
 
           return ListView(
             children: [
@@ -89,7 +94,7 @@ class _StatusScreenState extends State<StatusScreen> {
                         fontWeight: FontWeight.w600,
                         letterSpacing: 0.5)),
               ),
-              _buildMyStatusTile(context, currentUser.uid, ownGroup),
+              _buildMyStatusTile(context, currentUser.id, ownGroup),
 
               // ── OTHER USERS' STATUS ─────────────────────
               if (otherGroups.isNotEmpty) ...[
@@ -102,7 +107,7 @@ class _StatusScreenState extends State<StatusScreen> {
                           fontWeight: FontWeight.w600,
                           letterSpacing: 0.5)),
                 ),
-                ...otherGroups.map((group) => _buildOtherStatusTile(context, group, currentUser.uid)),
+                ...otherGroups.map((group) => _buildOtherStatusTile(context, group, currentUser.id)),
               ] else
                 Padding(
                   padding: const EdgeInsets.all(32),
@@ -239,7 +244,15 @@ class _StatusScreenState extends State<StatusScreen> {
 
   String _formatTimeAgo(dynamic timestamp) {
     if (timestamp == null) return '';
-    final dt = timestamp is DateTime ? timestamp : timestamp.toDate();
+    DateTime? dt;
+    if (timestamp is DateTime) {
+      dt = timestamp;
+    } else if (timestamp is String) {
+      dt = DateTime.tryParse(timestamp);
+    } else {
+      dt = timestamp.toDate();
+    }
+    if (dt == null) return '';
     final diff = DateTime.now().difference(dt);
     if (diff.inMinutes < 1) return 'baru saja';
     if (diff.inMinutes < 60) return '${diff.inMinutes} menit lalu';

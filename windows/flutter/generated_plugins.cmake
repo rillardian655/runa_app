@@ -3,13 +3,14 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  cloud_firestore
+  app_links
+  audioplayers_windows
   file_selector_windows
-  firebase_auth
-  firebase_core
-  firebase_storage
   flutter_webrtc
+  passkeys_windows
   permission_handler_windows
+  record_windows
+  url_launcher_windows
 )
 
 list(APPEND FLUTTER_FFI_PLUGIN_LIST

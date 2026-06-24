@@ -1,0 +1,13 @@
+{
+  "name": "firebase-to-supabase-migration",
+  "version": "1.0.0",
+  "description": "Migrate Firebase Auth users to Supabase Auth",
+  "main": "migrate_users.js",
+  "scripts": {
+    "migrate": "node migrate_users.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.0.0",
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}

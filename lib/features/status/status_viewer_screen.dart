@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:video_player/video_player.dart';
 import 'package:runa_app/core/services/chat_service.dart';
 import 'package:runa_app/core/services/status_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:runa_app/core/utils/image_helper.dart';
 
 class StatusViewerScreen extends StatefulWidget {
@@ -36,7 +37,11 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
   final FocusNode _replyFocusNode = FocusNode();
   final ChatService _chatService = ChatService();
   bool _isSending = false;
-  bool _isPaused = false;
+  bool _isPaused = false; // Track pause state for clean screen
+
+  // Video playback (for type == 'video' statuses)
+  VideoPlayerController? _videoController;
+  bool _isVideoLoading = false;
 
   @override
   void initState() {
@@ -45,16 +50,69 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
     _startStory(0);
   }
 
-  void _startStory(int index) {
+  Future<void> _disposeVideo() async {
+    final c = _videoController;
+    _videoController = null;
+    if (c != null) {
+      try {
+        await c.pause();
+      } catch (_) {}
+      await c.dispose();
+    }
+  }
+
+  Future<void> _startStory(int index) async {
     if (index >= widget.statuses.length) {
-      Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop();
       return;
     }
-    setState(() => _currentIndex = index);
-    _progressController.reset();
-    _progressController.forward().then((_) {
-      if (mounted && !_isReplying) _nextStory();
+    await _disposeVideo();
+    if (!mounted) return;
+    setState(() {
+      _currentIndex = index;
+      _isPaused = false;
+      _isVideoLoading = false;
     });
+    _progressController.reset();
+
+    final status = widget.statuses[index];
+    if (status['type'] == 'video') {
+      await _playVideoStory(status);
+    } else {
+      _progressController.duration = _storyDuration;
+      _progressController.forward().then((_) {
+        if (mounted && !_isReplying) _nextStory();
+      });
+    }
+  }
+
+  Future<void> _playVideoStory(Map<String, dynamic> status) async {
+    final url = (status['content'] as String?) ?? '';
+    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    _videoController = controller;
+    setState(() => _isVideoLoading = true);
+    try {
+      await controller.initialize();
+      // Bail if we navigated away while loading
+      if (!mounted || _videoController != controller) return;
+      await controller.setLooping(false);
+      final dur = controller.value.duration;
+      _progressController.duration =
+          dur.inMilliseconds > 0 ? dur : _storyDuration;
+      setState(() => _isVideoLoading = false);
+      await controller.play();
+      _progressController.forward().then((_) {
+        if (mounted && !_isReplying) _nextStory();
+      });
+    } catch (e) {
+      // Couldn't load the video — fall back to the default story timer
+      if (!mounted || _videoController != controller) return;
+      setState(() => _isVideoLoading = false);
+      _progressController.duration = _storyDuration;
+      _progressController.forward().then((_) {
+        if (mounted && !_isReplying) _nextStory();
+      });
+    }
   }
 
   void _nextStory() {
@@ -147,70 +205,17 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
     }
   }
 
-  void _showSpectators(List<String> viewerUids) {
-    if (viewerUids.isEmpty) return;
-    _progressController.stop();
-    setState(() => _isPaused = true);
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Theme.of(context).cardColor,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (context) {
-        return Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Text('Dilihat Oleh', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-            ),
-            Flexible(
-              child: ListView.builder(
-                shrinkWrap: true,
-                itemCount: viewerUids.length,
-                itemBuilder: (context, index) {
-                  return FutureBuilder<DocumentSnapshot>(
-                    future: FirebaseFirestore.instance.collection('users').doc(viewerUids[index]).get(),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) return const ListTile(title: Text('Loading...'));
-                      final data = snapshot.data!.data() as Map<String, dynamic>?;
-                      if (data == null) return const SizedBox.shrink();
-                      final photoUrl = data['photoUrl'] ?? '';
-                      final name = data['username'] ?? 'Unknown';
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundImage: photoUrl.isNotEmpty ? ImageHelper.getImageProvider(photoUrl) : null,
-                          child: photoUrl.isEmpty ? Text(name.isNotEmpty ? name[0].toUpperCase() : '?') : null,
-                        ),
-                        title: Text(name),
-                      );
-                    }
-                  );
-                }
-              ),
-            ),
-          ]
-        );
-      }
-    ).then((_) {
-      if (mounted) {
-        setState(() => _isPaused = false);
-        if (!_isReplying) {
-          _progressController.forward().then((_) {
-            if (mounted && !_isReplying) _nextStory();
-          });
-        }
-      }
-    });
-  }
-
   String _timeAgo(dynamic timestamp) {
     if (timestamp == null) return '';
-    DateTime dt;
+    DateTime? dt;
     if (timestamp is DateTime) {
       dt = timestamp;
+    } else if (timestamp is String) {
+      dt = DateTime.tryParse(timestamp);
     } else {
       dt = timestamp.toDate();
     }
+    if (dt == null) return '';
     final diff = DateTime.now().difference(dt);
     if (diff.inMinutes < 1) return 'baru saja';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m yang lalu';
@@ -230,8 +235,9 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
   Widget build(BuildContext context) {
     final currentStatus = widget.statuses[_currentIndex];
     final isImage = currentStatus['type'] == 'image';
-    final bgColor = Color(currentStatus['bgColor'] ?? 0xFF1A1A2E);
-    final viewedBy = List<String>.from(currentStatus['viewedBy'] ?? []);
+    final isVideo = currentStatus['type'] == 'video';
+    final bgColor = Color((currentStatus['bg_color'] as int?) ?? 0xFF1A1A2E);
+    final viewedBy = List<String>.from(currentStatus['viewed_by'] ?? []);
     final viewCount = viewedBy.length;
 
     return Scaffold(
@@ -247,13 +253,14 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
             _nextStory();
           } else {
             // Pause / resume on center tap
-            setState(() => _isPaused = !_isPaused);
-            if (_isPaused) {
+            if (_progressController.isAnimating) {
               _progressController.stop();
+              setState(() => _isPaused = true);
             } else {
               _progressController.forward().then((_) {
                 if (mounted && !_isReplying) _nextStory();
               });
+              setState(() => _isPaused = false);
             }
           }
         },
@@ -264,7 +271,44 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
                 fit: StackFit.expand,
                 children: [
                   // --- Background Content ---
-                  if (isImage)
+                  if (isVideo)
+                    Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        if (_videoController != null && _videoController!.value.isInitialized)
+                          FittedBox(
+                            fit: BoxFit.contain,
+                            child: SizedBox(
+                              width: _videoController!.value.size.width,
+                              height: _videoController!.value.size.height,
+                              child: VideoPlayer(_videoController!),
+                            ),
+                          )
+                        else
+                          const Center(child: CircularProgressIndicator(color: Colors.white)),
+                        if (_isVideoLoading)
+                          const Center(child: CircularProgressIndicator(color: Colors.white)),
+                        if (currentStatus['caption'] != null && currentStatus['caption'].toString().isNotEmpty)
+                          Positioned(
+                            bottom: widget.isOwn ? 60 : 80,
+                            left: 16,
+                            right: 16,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Text(
+                                currentStatus['caption'],
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(color: Colors.white, fontSize: 16),
+                              ),
+                            ),
+                          ),
+                      ],
+                    )
+                  else if (isImage)
                     Stack(
                       fit: StackFit.expand,
                       children: [
@@ -309,69 +353,64 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
                       ),
                     ),
 
-                  // --- Top gradient overlay ---
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      height: 120,
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [Colors.black54, Colors.transparent],
+                  // --- Top gradient overlay (hidden when paused) ---
+                  if (!_isPaused)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        height: 120,
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.black54, Colors.transparent],
+                          ),
                         ),
                       ),
                     ),
-                  ),
 
-                  // --- Progress Bars ---
+                  // --- Progress Bars (always visible) ---
                   Positioned(
                     top: MediaQuery.of(context).padding.top + 8,
                     left: 8,
                     right: 8,
-                    child: AnimatedOpacity(
-                      opacity: _isPaused ? 0.0 : 1.0,
-                      duration: const Duration(milliseconds: 200),
-                      child: AnimatedBuilder(
-                        animation: _progressController,
-                        builder: (context, child) {
-                          return Row(
-                            children: List.generate(widget.statuses.length, (i) {
-                              return Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 2),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: LinearProgressIndicator(
-                                      value: i < _currentIndex
-                                          ? 1.0
-                                          : i == _currentIndex
-                                              ? _progressController.value
-                                              : 0.0,
-                                      minHeight: 3,
-                                      backgroundColor: Colors.white30,
-                                      valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ),
+                    child: AnimatedBuilder(
+                      animation: _progressController,
+                      builder: (context, child) {
+                        return Row(
+                          children: List.generate(widget.statuses.length, (i) {
+                            return Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 2),
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(4),
+                                  child: LinearProgressIndicator(
+                                    value: i < _currentIndex
+                                        ? 1.0
+                                        : i == _currentIndex
+                                            ? _progressController.value
+                                            : 0.0,
+                                    minHeight: 3,
+                                    backgroundColor: Colors.white30,
+                                    valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
                                   ),
                                 ),
-                              );
-                            }),
-                          );
-                        },
-                      ),
+                              ),
+                            );
+                          }),
+                        );
+                      },
                     ),
                   ),
 
-                  // --- Header (user info + close) ---
-                  Positioned(
-                    top: MediaQuery.of(context).padding.top + 20,
-                    left: 12,
-                    right: 12,
-                    child: AnimatedOpacity(
-                      opacity: _isPaused ? 0.0 : 1.0,
-                      duration: const Duration(milliseconds: 200),
+                  // --- Header (user info + close) — hidden when paused for clean screen ---
+                  if (!_isPaused)
+                    Positioned(
+                      top: MediaQuery.of(context).padding.top + 20,
+                      left: 12,
+                      right: 12,
                       child: Row(
                         children: [
                           CircleAvatar(
@@ -402,7 +441,7 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
                                   ),
                                 ),
                                 Text(
-                                  _timeAgo(currentStatus['timestamp']),
+                                  _timeAgo(currentStatus['created_at']),
                                   style: const TextStyle(color: Colors.white70, fontSize: 12),
                                 ),
                               ],
@@ -442,27 +481,34 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
                         ],
                       ),
                     ),
-                  ),
 
-                  // --- Bottom: view count (own status) ---
-                  if (widget.isOwn)
+                  // --- Bottom: view count (own status) — hidden when paused ---
+                  if (widget.isOwn && !_isPaused)
                     Positioned(
                       bottom: 16,
                       left: 16,
                       right: 16,
-                      child: AnimatedOpacity(
-                        opacity: _isPaused ? 0.0 : 1.0,
-                        duration: const Duration(milliseconds: 200),
-                        child: GestureDetector(
-                          onTap: () => _showSpectators(viewedBy),
+                      child: GestureDetector(
+                        onTap: () => _showViewersList(viewedBy),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
                           child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               const Icon(Icons.remove_red_eye, color: Colors.white70, size: 18),
                               const SizedBox(width: 6),
                               Text(
-                                '$viewCount dilihat',
+                                '$viewCount viewed',
                                 style: const TextStyle(color: Colors.white70),
                               ),
+                              if (viewCount > 0) ...[
+                                const SizedBox(width: 8),
+                                const Icon(Icons.chevron_right, color: Colors.white70, size: 18),
+                              ],
                             ],
                           ),
                         ),
@@ -472,13 +518,9 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
               ),
             ),
 
-            // --- Reply input bar (only for other people's status) ---
-            if (!widget.isOwn)
-              AnimatedOpacity(
-                opacity: _isPaused ? 0.0 : 1.0,
-                duration: const Duration(milliseconds: 200),
-                child: _buildReplyBar(),
-              ),
+            // --- Reply input bar (only for other people's status, hidden when paused) ---
+            if (!widget.isOwn && !_isPaused)
+              _buildReplyBar(),
           ],
         ),
       ),
@@ -571,4 +613,90 @@ class _StatusViewerScreenState extends State<StatusViewerScreen>
       ),
     );
   }
-}
+
+  void _showViewersList(List<String> viewedBy) {
+        if (viewedBy.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No viewers yet')),
+          );
+          return;
+        }
+    
+        showModalBottomSheet(
+          context: context,
+          backgroundColor: Colors.transparent,
+          builder: (ctx) => Container(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.remove_red_eye, size: 24),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Viewers (${viewedBy.length})',
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * 0.5,
+                  ),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: viewedBy.length,
+                    itemBuilder: (context, index) {
+                      final viewerUid = viewedBy[index];
+                      return FutureBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+                        future: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(viewerUid)
+                            .get(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData) {
+                            return const ListTile(
+                              leading: CircleAvatar(child: CircularProgressIndicator()),
+                              title: Text('Loading...'),
+                            );
+                          }
+
+                          final userData = snapshot.data?.data();
+                          final username = userData?['username'] ?? 'Unknown';
+                          final photoUrl = userData?['photo_url'] ?? '';
+    
+                          return ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.blueAccent,
+                              backgroundImage: photoUrl.isNotEmpty
+                                  ? ImageHelper.getImageProvider(photoUrl)
+                                  : null,
+                              child: photoUrl.isEmpty
+                                  ? Text(
+                                      username.isNotEmpty ? username[0].toUpperCase() : '?',
+                                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                                    )
+                                  : null,
+                            ),
+                            title: Text(username, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: Text(userData?['bio'] ?? 'Available'),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    }

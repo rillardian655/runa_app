@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 
 class ImageHelper {
@@ -6,6 +7,8 @@ class ImageHelper {
     if (url.startsWith('data:image')) {
       final base64String = url.split(',').last;
       return MemoryImage(base64Decode(base64String));
+    } else if (url.startsWith('file://') || url.startsWith('/')) {
+      return FileImage(File(url.replaceFirst('file://', '')));
     } else {
       return NetworkImage(url);
     }
@@ -15,6 +18,8 @@ class ImageHelper {
     if (url.startsWith('data:image')) {
       final base64String = url.split(',').last;
       return Image.memory(base64Decode(base64String), fit: fit);
+    } else if (url.startsWith('file://') || url.startsWith('/')) {
+      return Image.file(File(url.replaceFirst('file://', '')), fit: fit);
     } else {
       return Image.network(url, fit: fit);
     }

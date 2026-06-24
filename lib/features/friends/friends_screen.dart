@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:iconsax/iconsax.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:runa_app/core/services/auth_service.dart';
@@ -12,24 +13,21 @@ class FriendsScreen extends StatefulWidget {
   State<FriendsScreen> createState() => _FriendsScreenState();
 }
 
-class _FriendsScreenState extends State<FriendsScreen> {
+class _FriendsScreenState extends State<FriendsScreen>
+    with SingleTickerProviderStateMixin {
   final FriendService _friendService = FriendService();
+  late TabController _tabController;
 
-  Widget _buildUserAvatar(String photoUrl, String name, Color fallbackColor) {
-    if (photoUrl.isNotEmpty) {
-      return CircleAvatar(
-        backgroundColor: Colors.grey,
-        backgroundImage: ImageHelper.getImageProvider(photoUrl),
-      );
-    }
-    final firstLetter = name.isNotEmpty ? name[0].toUpperCase() : '?';
-    return CircleAvatar(
-      backgroundColor: fallbackColor,
-      child: Text(
-        firstLetter,
-        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-      ),
-    );
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
@@ -37,194 +35,395 @@ class _FriendsScreenState extends State<FriendsScreen> {
     final authService = context.watch<AuthService>();
     final currentUser = authService.currentUser;
 
-    if (currentUser == null) {
-      return const Scaffold(body: Center(child: Text('Not Logged In')));
-    }
-
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
-        appBar: AppBar(
-          title: const Text('Friends'),
-          actions: [
-            IconButton(
-              icon: const Icon(Icons.person_add_alt_1),
-              onPressed: () {
-                context.push('/search_friends');
-              },
-            )
-          ],
-          bottom: const TabBar(
-            tabs: [
-              Tab(text: 'Discover'),
-              Tab(text: 'My Friends'),
-              Tab(text: 'Requests'),
-            ],
-          ),
-        ),
-        body: TabBarView(
-          children: [
-            // TAB 1: Discover (Global Users)
-            StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _friendService.getAllUsers(currentUser.uid),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final users = snapshot.data ?? [];
-                if (users.isEmpty) return const Center(child: Text('No users found.'));
-
-                return ListView.builder(
-                  itemCount: users.length,
-                  itemBuilder: (context, index) {
-                    final user = users[index];
-                    final name = user['username'] ?? 'Unknown';
-                    final bio = user['bio'] ?? 'Available';
-                    final photoUrl = user['photoUrl'] ?? '';
-
-                    return ListTile(
-                      leading: _buildUserAvatar(photoUrl, name, Colors.blue),
-                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(bio),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.person_add),
-                        onPressed: () {
-                          _friendService.addFriendByUid(currentUser.uid, user['uid']);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Request sent!')),
-                          );
-                        },
-                      ),
-                      onTap: () => context.push('/profile/${user["uid"]}'),
-                    );
-                  },
-                );
-              },
-            ),
-
-            // TAB 2: My Friends
-            StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _friendService.getFriends(currentUser.uid),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final myFriends = snapshot.data ?? [];
-                if (myFriends.isEmpty) {
-                  return const Center(child: Text('You have no friends yet.'));
-                }
-
-                return ListView.builder(
-                  itemCount: myFriends.length,
-                  itemBuilder: (context, index) {
-                    final friend = myFriends[index];
-                    final name = friend['name'] as String;
-                    final status = friend['status'] as String;
-                    // Note: getFriends response should be updated to include photoUrl
-                    final photoUrl = friend['photoUrl'] ?? ''; 
-
-                    return ListTile(
-                      leading: _buildUserAvatar(photoUrl, name, Colors.green),
-                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(status),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.chat_bubble_outline),
-                        onPressed: () {
-                          context.push('/chat/${friend["uid"]}');
-                        },
-                      ),
-                      onTap: () => context.push('/profile/${friend["uid"]}'),
-                    );
-                  },
-                );
-              },
-            ),
-
-            // TAB 3: Request History
-            SingleChildScrollView(
-              child: Column(
-                children: [
-                  // Received Requests
-                  StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: _friendService.getPendingRequests(currentUser.uid),
-                    builder: (context, snapshot) {
-                      final requests = snapshot.data ?? [];
-                      if (requests.isEmpty) return const SizedBox();
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: Text('Received Requests', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: requests.length,
-                            itemBuilder: (context, index) {
-                              final req = requests[index];
-                              return ListTile(
-                                leading: _buildUserAvatar(req['photoUrl'] ?? '', req['name'], Colors.orange),
-                                title: Text(req['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: const Text('Wants to be friends'),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.check_circle, color: Colors.green),
-                                      onPressed: () => _friendService.acceptFriendRequest(currentUser.uid, req['uid']),
-                                    ),
-                                    IconButton(
-                                      icon: const Icon(Icons.cancel, color: Colors.red),
-                                      onPressed: () => _friendService.rejectFriendRequest(currentUser.uid, req['uid']),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            },
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                  // Sent Requests
-                  StreamBuilder<List<Map<String, dynamic>>>(
-                    stream: _friendService.getSentRequests(currentUser.uid),
-                    builder: (context, snapshot) {
-                      final requests = snapshot.data ?? [];
-                      if (requests.isEmpty) return const SizedBox();
-
-                      return Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: Text('Sent Requests', style: TextStyle(fontWeight: FontWeight.bold)),
-                          ),
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            itemCount: requests.length,
-                            itemBuilder: (context, index) {
-                              final req = requests[index];
-                              return ListTile(
-                                leading: _buildUserAvatar(req['photoUrl'] ?? '', req['name'], Colors.blueGrey),
-                                title: Text(req['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: const Text('Request sent (Pending)'),
-                              );
-                            },
-                          ),
-                        ],
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Friends'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.person_add_alt_1),
+            onPressed: () {
+              context.push('/search_friends');
+            },
+          )
+        ],
+        bottom: TabBar(
+          controller: _tabController,
+          labelColor: Theme.of(context).primaryColor,
+          unselectedLabelColor: Colors.grey,
+          indicatorColor: Theme.of(context).primaryColor,
+          tabs: const [
+            Tab(text: 'Friends', icon: Icon(Iconsax.people)),
+            Tab(text: 'Requests', icon: Icon(Iconsax.user_add)),
+            Tab(text: 'Discover', icon: Icon(Iconsax.discover)),
           ],
         ),
       ),
+      body: currentUser == null
+          ? const Center(child: Text('Not Logged In'))
+          : TabBarView(
+              controller: _tabController,
+              children: [
+                _buildFriendsTab(currentUser.id),
+                _buildRequestsTab(currentUser.id),
+                _buildDiscoverTab(currentUser.id),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildFriendsTab(String currentUid) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _friendService.getFriends(currentUid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final myFriends = snapshot.data ?? [];
+
+        if (myFriends.isEmpty) {
+          return Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+                const SizedBox(height: 16),
+                const Text(
+                  'No friends yet',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Go to Discover tab to find people!',
+                  style: TextStyle(color: Colors.grey[500]),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return ListView.builder(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          itemCount: myFriends.length,
+          itemBuilder: (context, index) {
+            final friend = myFriends[index];
+            final name = friend['name'] as String;
+            final status = friend['status'] as String;
+            final photoUrl = friend['photoUrl'] as String? ?? '';
+            final firstLetter =
+                name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+            return ListTile(
+              leading: CircleAvatar(
+                backgroundColor: Colors.green,
+                backgroundImage:
+                    photoUrl.isNotEmpty ? ImageHelper.getImageProvider(photoUrl) : null,
+                child: photoUrl.isEmpty
+                    ? Text(
+                        firstLetter,
+                        style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold),
+                      )
+                    : null,
+              ),
+              title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text(status),
+              trailing: IconButton(
+                icon: const Icon(Icons.chat_bubble_outline),
+                onPressed: () {
+                  context.push('/chat/${friend["uid"]}');
+                },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildRequestsTab(String currentUid) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _friendService.getPendingRequests(currentUid),
+      builder: (context, pendingSnapshot) {
+        return StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _friendService.getSentRequests(currentUid),
+          builder: (context, sentSnapshot) {
+            if (pendingSnapshot.connectionState == ConnectionState.waiting &&
+                sentSnapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            final pendingRequests = pendingSnapshot.data ?? [];
+            final sentRequests = sentSnapshot.data ?? [];
+
+            if (pendingRequests.isEmpty && sentRequests.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.mail_outline, size: 64, color: Colors.grey[400]),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'No pending requests',
+                      style:
+                          TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            return ListView(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              children: [
+                // Incoming requests
+                if (pendingRequests.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: Text(
+                      'Incoming (${pendingRequests.length})',
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.orange),
+                    ),
+                  ),
+                  ...pendingRequests.map((request) {
+                    final name = request['name'] as String;
+                    final uid = request['uid'] as String;
+                    final photoUrl = request['photoUrl'] as String? ?? '';
+                    final firstLetter =
+                        name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.orange,
+                        backgroundImage: photoUrl.isNotEmpty
+                            ? ImageHelper.getImageProvider(photoUrl)
+                            : null,
+                        child: photoUrl.isEmpty
+                            ? Text(
+                                firstLetter,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold),
+                              )
+                            : null,
+                      ),
+                      title: Text(name,
+                          style:
+                              const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: const Text('Wants to be your friend'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.check_circle,
+                                color: Colors.green),
+                            onPressed: () async {
+                              await _friendService.acceptFriendRequest(
+                                  currentUid, uid);
+                            },
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.cancel, color: Colors.red),
+                            onPressed: () async {
+                              await _friendService.rejectFriendRequest(
+                                  currentUid, uid);
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  const Divider(),
+                ],
+
+                // Sent requests (history)
+                if (sentRequests.isNotEmpty) ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                    child: Text(
+                      'Sent (${sentRequests.length})',
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue),
+                    ),
+                  ),
+                  ...sentRequests.map((request) {
+                    final name = request['name'] as String;
+                    final photoUrl = request['photoUrl'] as String? ?? '';
+                    final firstLetter =
+                        name.isNotEmpty ? name[0].toUpperCase() : '?';
+
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.blue,
+                        backgroundImage: photoUrl.isNotEmpty
+                            ? ImageHelper.getImageProvider(photoUrl)
+                            : null,
+                        child: photoUrl.isEmpty
+                            ? Text(
+                                firstLetter,
+                                style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold),
+                              )
+                            : null,
+                      ),
+                      title: Text(name,
+                          style:
+                              const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: const Text('Request sent'),
+                      trailing: const Chip(
+                        label: Text('Pending',
+                            style: TextStyle(fontSize: 12)),
+                        backgroundColor: Colors.blueGrey,
+                      ),
+                    );
+                  }),
+                ],
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDiscoverTab(String currentUid) {
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _friendService.getAllUsers(currentUid),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        final allUsers = snapshot.data ?? [];
+
+        if (allUsers.isEmpty) {
+          return const Center(child: Text('No users found.'));
+        }
+
+        // Also get friend status for each user
+        return StreamBuilder<List<Map<String, dynamic>>>(
+          stream: _friendService.getFriends(currentUid),
+          builder: (context, friendsSnapshot) {
+            return StreamBuilder<List<Map<String, dynamic>>>(
+              stream: _friendService.getPendingRequests(currentUid),
+              builder: (context, pendingSnapshot) {
+                return StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _friendService.getSentRequests(currentUid),
+                  builder: (context, sentSnapshot) {
+                    final friendUids = (friendsSnapshot.data ?? [])
+                        .map((f) => f['uid'] as String)
+                        .toSet();
+                    final pendingUids = (pendingSnapshot.data ?? [])
+                        .map((f) => f['uid'] as String)
+                        .toSet();
+                    final sentUids = (sentSnapshot.data ?? [])
+                        .map((f) => f['uid'] as String)
+                        .toSet();
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      itemCount: allUsers.length,
+                      itemBuilder: (context, index) {
+                        final user = allUsers[index];
+                        final username = user['username'] as String;
+                        final bio = user['bio'] as String;
+                        final photoUrl = user['photoUrl'] as String? ?? '';
+                        final uid = user['uid'] as String;
+                        final firstLetter = username.isNotEmpty
+                            ? username[0].toUpperCase()
+                            : '?';
+
+                        final isFriend = friendUids.contains(uid);
+                        final isPending = pendingUids.contains(uid);
+                        final isSent = sentUids.contains(uid);
+
+                        Widget trailingWidget;
+                        if (isFriend) {
+                          trailingWidget = const Chip(
+                            label: Text('Friends',
+                                style: TextStyle(fontSize: 12)),
+                            backgroundColor: Colors.green,
+                          );
+                        } else if (isPending) {
+                          trailingWidget = ElevatedButton(
+                            onPressed: () async {
+                              await _friendService.acceptFriendRequest(
+                                  currentUid, uid);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20)),
+                            ),
+                            child: const Text('Accept',
+                                style: TextStyle(color: Colors.white)),
+                          );
+                        } else if (isSent) {
+                          trailingWidget = const Chip(
+                            label: Text('Sent',
+                                style: TextStyle(fontSize: 12)),
+                            backgroundColor: Colors.blueGrey,
+                          );
+                        } else {
+                          trailingWidget = ElevatedButton(
+                            onPressed: () async {
+                              await _friendService.addFriendByUid(
+                                  currentUid, uid);
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                      content: Text(
+                                          'Friend request sent to @$username!')),
+                                );
+                              }
+                            },
+                            style: ElevatedButton.styleFrom(
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20)),
+                            ),
+                            child: const Text('Add'),
+                          );
+                        }
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: Colors.blueAccent,
+                            backgroundImage: photoUrl.isNotEmpty
+                                ? ImageHelper.getImageProvider(photoUrl)
+                                : null,
+                            child: photoUrl.isEmpty
+                                ? Text(
+                                    firstLetter,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold),
+                                  )
+                                : null,
+                          ),
+                          title: Text(username,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold)),
+                          subtitle: Text(bio),
+                          trailing: trailingWidget,
+                          onTap: () {
+                            context.push('/profile/$uid');
+                          },
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
     );
   }
 }
