@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:runa_app/app/routes.dart';
 import 'package:runa_app/core/services/call_session_controller.dart';
 
@@ -22,7 +23,7 @@ class _DynamicIslandState extends State<DynamicIsland> {
   void _maximize() {
     _expanded = false;
     _controller.maximize();
-    appRouter.push('/call', extra: {
+    context.push('/call', extra: {
       'callId': _controller.callId,
       'currentUserId': _controller.currentUserId,
       'currentUserName': _controller.currentUserName,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:runa_app/firebase_options.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'package:runa_app/app/routes.dart';
 import 'package:runa_app/app/theme.dart';
 import 'package:runa_app/core/services/auth_service.dart';

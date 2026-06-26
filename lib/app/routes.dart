@@ -13,6 +13,7 @@ import 'package:runa_app/settings/edit_profile_screen.dart';
 import 'package:runa_app/features/call/call_screen.dart';
 import 'package:runa_app/features/friends/search_friends_screen.dart';
 import 'package:runa_app/features/auth/splash_screen.dart';
+import 'package:runa_app/features/status/add_status_screen.dart';
 import 'package:runa_app/core/services/auth_service.dart';
 
 // Create a global key for the router so we can pass auth service easily if needed,
