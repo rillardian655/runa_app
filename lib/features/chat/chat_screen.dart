@@ -1231,12 +1231,14 @@ class _ChatScreenState extends State<ChatScreen> {
                         ),
                       ],
                     );
-                  },
-                );
-              },
-            ),
-          ),
-          SafeArea(
+                  }, // Closes FutureBuilder builder
+                ); // Closes FutureBuilder return
+              }, // Closes ListView.builder itemBuilder
+            ); // Closes ListView.builder return
+          }, // Closes StreamBuilder builder
+        ), // Closes StreamBuilder
+      ), // Closes Expanded
+      SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(8.0),
               child: Column(
