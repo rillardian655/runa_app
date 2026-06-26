@@ -228,7 +228,7 @@ class _FriendsScreenState extends State<FriendsScreen>
                           IconButton(
                             icon: const Icon(Icons.cancel, color: Colors.red),
                             onPressed: () async {
-                              await _friendService.rejectFriendRequest(
+                              await _friendService.rejectRequest(
                                   currentUid, uid);
                             },
                           ),
