@@ -178,10 +178,25 @@ class FriendService {
   }
 
   /// Reject a friend request
-  Future<void> rejectFriendRequest(
-      String currentUid, String requesterUid) async {
-    
-    await _firestore.collection('friends').doc('${currentUid}_$requesterUid').delete();
-    await _firestore.collection('friends').doc('${requesterUid}_$currentUid').delete();
+  Future<void> rejectRequest(String currentUid, String senderUid) async {
+    await _firestore
+        .collection('friends')
+        .doc('${currentUid}_$senderUid')
+        .delete();
+    await _firestore
+        .collection('friends')
+        .doc('${senderUid}_$currentUid')
+        .delete();
+  }
+
+  Future<void> unfriend(String currentUid, String friendUid) async {
+    await _firestore
+        .collection('friends')
+        .doc('${currentUid}_$friendUid')
+        .delete();
+    await _firestore
+        .collection('friends')
+        .doc('${friendUid}_$currentUid')
+        .delete();
   }
 }

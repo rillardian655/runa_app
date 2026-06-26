@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -19,6 +20,9 @@ class NotificationService {
   /// Chat id currently open on screen. Message notifications for this chat are
   /// suppressed so the user isn't notified about the conversation they're in.
   static String? activeChatId;
+
+  final StreamController<String> _onNotificationTapController = StreamController<String>.broadcast();
+  Stream<String> get onNotificationTap => _onNotificationTapController.stream;
 
   Future<void> initialize(String userId) async {
     if (!kIsWeb && !Platform.isLinux && !_initialized) {
@@ -65,8 +69,12 @@ class NotificationService {
         final data = event.notification.additionalData;
         if (data != null) {
           final chatId = data['chatId'] as String?;
-          debugPrint('[NotificationService] Notif tapped, chatId: $chatId');
-          // TODO: navigasi ke chat screen berdasarkan chatId
+          final senderId = data['senderId'] as String?;
+          if (senderId != null) {
+            _onNotificationTapController.add('/chat/$senderId');
+          } else if (chatId != null) {
+            _onNotificationTapController.add('/chat/$chatId');
+          }
         }
       });
 
@@ -91,7 +99,10 @@ class NotificationService {
       await _localNotificationsPlugin!.initialize(
         initializationSettings,
         onDidReceiveNotificationResponse: (NotificationResponse response) {
-          debugPrint('[NotificationService] Notification tapped: ${response.payload}');
+          final payload = response.payload;
+          if (payload != null) {
+            _onNotificationTapController.add(payload);
+          }
         },
       );
 

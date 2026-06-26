@@ -6,7 +6,9 @@ import 'package:runa_app/app/routes.dart';
 import 'package:runa_app/app/theme.dart';
 import 'package:runa_app/core/services/auth_service.dart';
 import 'package:runa_app/core/services/theme_service.dart';
+import 'dart:async';
 import 'package:runa_app/core/services/app_update_service.dart';
+import 'package:runa_app/core/services/notification_service.dart';
 import 'package:runa_app/features/call/dynamic_island.dart';
 
 void main() async {
@@ -36,16 +38,24 @@ class RunaApp extends StatefulWidget {
 
 class _RunaAppState extends State<RunaApp> with WidgetsBindingObserver {
   bool _updateChecked = false;
+  GoRouter? _router;
+  StreamSubscription? _notifSub;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _notifSub = NotificationService.instance.onNotificationTap.listen((payload) {
+      if (_router != null) {
+        _router!.push(payload);
+      }
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _notifSub?.cancel();
     super.dispose();
   }
 
@@ -65,12 +75,18 @@ class _RunaAppState extends State<RunaApp> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final themeMode = context.watch<ThemeService>().themeMode;
+    final authService = context.read<AuthService>();
+    
+    // It's safe to use a memoized router or just recreate. Actually, to avoid recreating GoRouter on every build:
+    // We'll create a GoRouter provider or just create it once. Let's create it once using an internal variable.
+    // Wait, since we need to do this cleanly:
+    
     return MaterialApp.router(
       title: 'Ru.na',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeMode,
-      routerConfig: appRouter,
+      routerConfig: _router ??= createAppRouter(authService),
       debugShowCheckedModeBanner: false,
       builder: (context, child) {
         // Check for updates using a context below MaterialApp

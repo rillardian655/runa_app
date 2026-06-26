@@ -14,9 +14,13 @@ class AuthService extends ChangeNotifier {
   StreamSubscription? _messageSubscription;
   String? _lastNotifiedMessageId;
   bool _messageListenerPrimed = false;
+  bool _isInitialized = false;
+
+  bool get isInitialized => _isInitialized;
 
   AuthService() {
     _auth.authStateChanges().listen((user) async {
+      _isInitialized = true;
       if (user != null) {
         try {
           await _notificationService.initialize(user.uid);
@@ -173,11 +177,11 @@ class AuthService extends ChangeNotifier {
 
   Future<void> _updatePresence(String uid, String status) async {
     try {
-      await _firestore.collection('users').doc(uid).update({
+      await _firestore.collection('users').doc(uid).set({
         'presence_status': status,
         'last_seen': FieldValue.serverTimestamp(),
         'updated_at': FieldValue.serverTimestamp(),
-      });
+      }, SetOptions(merge: true));
     } catch (e) {
       debugPrint('[AuthService] Failed to update presence: $e');
     }

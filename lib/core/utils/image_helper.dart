@@ -21,7 +21,12 @@ class ImageHelper {
     } else if (url.startsWith('file://') || url.startsWith('/')) {
       return Image.file(File(url.replaceFirst('file://', '')), fit: fit);
     } else {
-      return Image.network(url, fit: fit);
+      return Image.network(
+        url,
+        fit: fit,
+        errorBuilder: (context, error, stackTrace) =>
+            const Icon(Icons.broken_image, color: Colors.grey),
+      );
     }
   }
 }

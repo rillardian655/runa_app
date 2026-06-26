@@ -78,7 +78,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 30,
+      imageQuality: 60,
       maxWidth: isBanner ? 800 : 400,
     );
 
@@ -134,20 +134,36 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (_profileImage != null) {
         if (kIsWeb) {
           final url = await _uploadImageAsBase64(_profileImage!);
-          if (url != null) photoUrl = url;
+          if (url != null) {
+            photoUrl = url;
+          } else {
+            throw Exception('Gagal memproses foto profil');
+          }
         } else {
           final url = await StorageService().uploadAvatar(File(_profileImage!.path), user.uid);
-          if (url != null) photoUrl = url;
+          if (url != null) {
+            photoUrl = url;
+          } else {
+            throw Exception('Gagal mengupload foto profil');
+          }
         }
       }
 
       if (_bannerImage != null) {
         if (kIsWeb) {
           final url = await _uploadImageAsBase64(_bannerImage!);
-          if (url != null) bannerUrl = url;
+          if (url != null) {
+            bannerUrl = url;
+          } else {
+            throw Exception('Gagal memproses banner');
+          }
         } else {
           final url = await StorageService().uploadFile(File(_bannerImage!.path), 'banners/${user.uid}_${DateTime.now().millisecondsSinceEpoch}.jpg');
-          if (url != null) bannerUrl = url;
+          if (url != null) {
+            bannerUrl = url;
+          } else {
+            throw Exception('Gagal mengupload banner');
+          }
         }
       }
 

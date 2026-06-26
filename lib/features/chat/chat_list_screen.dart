@@ -88,9 +88,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
                 if (chatSnapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                if (chatSnapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
 
                 final recentChats = chatSnapshot.data ?? [];
 
@@ -253,7 +250,56 @@ class _ChatListScreenState extends State<ChatListScreen> {
     }
     final ringColor = hasStatus ? (allViewed ? Colors.grey : Colors.green) : Colors.transparent;
 
-    return ListTile(
+    String formatTimestamp(Timestamp? ts) {
+      if (ts == null) return '';
+      final date = ts.toDate();
+      final now = DateTime.now();
+      final diff = now.difference(date);
+      
+      if (diff.inDays == 0 && now.day == date.day) {
+        return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+      } else if (diff.inDays == 1 || (diff.inDays == 0 && now.day != date.day)) {
+        return 'Kemarin';
+      } else {
+        return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+      }
+    }
+
+    final updatedTs = chat['updated_at'] as Timestamp?;
+    final timeStr = formatTimestamp(updatedTs);
+
+    return Dismissible(
+      key: Key(chat['uid']),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        color: Colors.red,
+        child: const Icon(Icons.delete, color: Colors.white),
+      ),
+      confirmDismiss: (direction) async {
+        return await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Hapus Chat?'),
+            content: Text('Anda yakin ingin menghapus chat dengan $name?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('Batal'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        );
+      },
+      onDismissed: (direction) {
+        _chatService.deleteChat(currentUid, chat['uid']);
+      },
+      child: ListTile(
       leading: GestureDetector(
         onTap: hasStatus ? () {
           final statuses = group['statuses'] as List<Map<String, dynamic>>;
@@ -281,13 +327,32 @@ class _ChatListScreenState extends State<ChatListScreen> {
             shape: BoxShape.circle,
             border: Border.all(color: ringColor, width: 2.5),
           ),
-          child: CircleAvatar(
-            backgroundColor: Colors.blueAccent,
-            backgroundImage: photoUrl.isNotEmpty ? ImageHelper.getImageProvider(photoUrl) : null,
-            child: photoUrl.isEmpty ? Text(
-              firstLetter,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ) : null,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.blueAccent,
+                backgroundImage: photoUrl.isNotEmpty ? ImageHelper.getImageProvider(photoUrl) : null,
+                child: photoUrl.isEmpty ? Text(
+                  firstLetter,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ) : null,
+              ),
+              if (chat['presence_status'] == 'online')
+                Positioned(
+                  right: 0,
+                  bottom: 0,
+                  child: Container(
+                    width: 14,
+                    height: 14,
+                    decoration: BoxDecoration(
+                      color: Colors.green,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 2),
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ),
@@ -305,7 +370,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
-          const Text('Recent', style: TextStyle(color: Colors.grey, fontSize: 12)),
+          Text(timeStr.isEmpty ? 'Recent' : timeStr, style: const TextStyle(color: Colors.grey, fontSize: 12)),
           if ((chat['unreadCount'] ?? 0) > 0)
             Container(
               margin: const EdgeInsets.only(top: 4),
@@ -324,6 +389,6 @@ class _ChatListScreenState extends State<ChatListScreen> {
       onTap: () {
         context.push('/chat/${chat["uid"]}');
       },
-    );
+    ));
   }
 }

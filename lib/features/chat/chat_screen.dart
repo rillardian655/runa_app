@@ -1026,25 +1026,75 @@ class _ChatScreenState extends State<ChatScreen> {
                   padding: const EdgeInsets.all(16),
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
+                    String formatTime(String? isoString) {
+                      if (isoString == null) return '';
+                      try {
+                        final date = DateTime.parse(isoString).toLocal();
+                        return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+                      } catch (_) {
+                        return '';
+                      }
+                    }
+
+                    String formatDateHeader(String? isoString) {
+                      if (isoString == null) return '';
+                      try {
+                        final date = DateTime.parse(isoString).toLocal();
+                        final now = DateTime.now();
+                        final diff = now.difference(date);
+                        if (diff.inDays == 0 && now.day == date.day) return 'Hari ini';
+                        if (diff.inDays == 1 || (diff.inDays == 0 && now.day != date.day)) return 'Kemarin';
+                        return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+                      } catch (_) {
+                        return '';
+                      }
+                    }
+
                     final data = messages[index];
                     final isMe = data['sender_id'] == currentUser.uid;
                     final type = data['type'] as String? ?? 'text';
-                    final reactions = (data['reactions'] as Map?)
-                        ?.cast<String, dynamic>();
+                    final reactions = (data['reactions'] as Map?)?.cast<String, dynamic>();
                     final isEdited = data['edited_at'] != null;
+
+                    bool showDateHeader = false;
+                    if (index == messages.length - 1) {
+                      showDateHeader = true;
+                    } else {
+                      final prevData = messages[index + 1];
+                      if (data['created_at'] != null && prevData['created_at'] != null) {
+                        final currDate = DateTime.parse(data['created_at']).toLocal();
+                        final prevDate = DateTime.parse(prevData['created_at']).toLocal();
+                        if (currDate.day != prevDate.day || currDate.month != prevDate.month || currDate.year != prevDate.year) {
+                          showDateHeader = true;
+                        }
+                      }
+                    }
 
                     return FutureBuilder<String>(
                       future: _chatService.decrypt(data['text'] ?? '', chatId),
                       builder: (context, decSnapshot) {
                         final text = decSnapshot.data ?? '...';
 
-                        return GestureDetector(
-                          onLongPress: () =>
-                              _showMessageActions(currentUser.uid, data, text),
-                          child: Align(
-                            alignment: isMe
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (showDateHeader)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                                child: Center(
+                                  child: Text(
+                                    formatDateHeader(data['created_at']),
+                                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                                  ),
+                                ),
+                              ),
+                            GestureDetector(
+                              onLongPress: () =>
+                                  _showMessageActions(currentUser.uid, data, text),
+                              child: Align(
+                                alignment: isMe
+                                    ? Alignment.centerRight
+                                    : Alignment.centerLeft,
                             child: Container(
                               margin: const EdgeInsets.only(bottom: 8),
                               padding: const EdgeInsets.symmetric(
@@ -1142,21 +1192,25 @@ class _ChatScreenState extends State<ChatScreen> {
                                   Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      if (isEdited)
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(right: 4),
-                                          child: Text(
-                                            'edited',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontStyle: FontStyle.italic,
-                                              color: isMe
-                                                  ? Colors.white70
-                                                  : Colors.grey,
-                                            ),
+                                      if (isEdited) ...[
+                                        Text(
+                                          'edited',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            fontStyle: FontStyle.italic,
+                                            color: isMe ? Colors.white70 : Colors.grey,
                                           ),
                                         ),
+                                        const SizedBox(width: 4),
+                                      ],
+                                      Text(
+                                        formatTime(data['created_at'] as String?),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: isMe ? Colors.white70 : Colors.grey,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
                                       if (isMe)
                                         Icon(
                                           data['status'] == 'read'
@@ -1174,8 +1228,8 @@ class _ChatScreenState extends State<ChatScreen> {
                               ),
                             ),
                           ),
-                        );
-                      },
+                        ),
+                      ],
                     );
                   },
                 );

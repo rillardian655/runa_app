@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:provider/provider.dart';
 import 'package:runa_app/core/services/auth_service.dart';
 import 'package:runa_app/core/services/friend_service.dart';
+import 'package:runa_app/core/utils/image_helper.dart';
 
 class SearchFriendsScreen extends StatefulWidget {
   const SearchFriendsScreen({super.key});
@@ -123,15 +124,21 @@ class _SearchFriendsScreenState extends State<SearchFriendsScreen> {
                     final user = _searchResults[index];
                     final username = user['username'] as String;
                     final bio = user['bio'] as String;
+                    final photoUrl = user['photo_url'] as String? ?? '';
                     final firstLetter = username.isNotEmpty ? username[0].toUpperCase() : '?';
 
                     return ListTile(
                       leading: CircleAvatar(
                         backgroundColor: Colors.blueAccent,
-                        child: Text(
-                          firstLetter,
-                          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                        ),
+                        backgroundImage: photoUrl.isNotEmpty
+                            ? ImageHelper.getImageProvider(photoUrl)
+                            : null,
+                        child: photoUrl.isEmpty
+                            ? Text(
+                                firstLetter,
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                              )
+                            : null,
                       ),
                       title: Text(username, style: const TextStyle(fontWeight: FontWeight.bold)),
                       subtitle: Text(bio),

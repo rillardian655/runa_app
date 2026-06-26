@@ -56,8 +56,10 @@ class ChatService {
             'uid': otherUid,
             'name': userData['username'] ?? 'Unknown',
             'photoUrl': userData['photo_url'] ?? '',
+            'presence_status': userData['presence_status'] ?? 'offline',
             'lastMessage': finalMsg,
             'unreadCount': row['unread_count'] ?? 0,
+            'updated_at': row['updated_at'],
           });
         }
       }
@@ -227,5 +229,30 @@ class ChatService {
       'timestamp': DateTime.now().toIso8601String(),
     });
     await docRef.update({'id': docRef.id});
+
+    // Update recent_chats for sender
+    final senderRecentRef = _firestore.collection('recent_chats').doc('${senderId}_$receiverId');
+    await senderRecentRef.set({
+      'user_id': senderId,
+      'other_user_id': receiverId,
+      'last_message': '[$type]',
+      'updated_at': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    // Update recent_chats for receiver (increment unread)
+    final receiverRecentRef = _firestore.collection('recent_chats').doc('${receiverId}_$senderId');
+    final existing = await receiverRecentRef.get();
+    final currentUnread = (existing.data()?['unread_count'] as int?) ?? 0;
+    
+    await receiverRecentRef.set({
+      'user_id': receiverId,
+      'other_user_id': senderId,
+      'last_message': '[$type]',
+      'unread_count': currentUnread + 1,
+      'updated_at': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+  }
+  Future<void> deleteChat(String currentUid, String otherUid) async {
+    await _firestore.collection('recent_chats').doc('${currentUid}_$otherUid').delete();
   }
 }

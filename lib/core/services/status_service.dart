@@ -85,30 +85,39 @@ class StatusService {
     final now = DateTime.now();
     final expiresAt = now.add(const Duration(hours: 24));
 
-    final fileName = '${uid}_${now.millisecondsSinceEpoch}.mp4';
-    final ref = _storage.ref().child('status_media').child(fileName);
-    
-    if (kIsWeb) {
-      final bytes = await videoFile.readAsBytes();
-      await ref.putData(bytes, SettableMetadata(contentType: 'video/mp4'));
-    } else {
-      await ref.putFile(File(videoFile.path), SettableMetadata(contentType: 'video/mp4'));
-    }
-    final videoUrl = await ref.getDownloadURL();
+    try {
+      final size = await videoFile.length();
+      if (size > 50 * 1024 * 1024) {
+        throw Exception('Video terlalu besar (Maksimal 50MB)');
+      }
 
-    await _firestore.collection('statuses').add({
-      'uid': uid,
-      'username': username,
-      'photo_url': photoUrl,
-      'content': videoUrl,
-      'caption': caption,
-      'type': 'video',
-      'bg_color': 0xFF000000,
-      'viewed_by': [],
-      'expires_at': expiresAt.toIso8601String(),
-      'created_at': now.toIso8601String(),
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+      final fileName = '${uid}_${now.millisecondsSinceEpoch}.mp4';
+      final ref = _storage.ref().child('status_media').child(fileName);
+      
+      if (kIsWeb) {
+        final bytes = await videoFile.readAsBytes();
+        await ref.putData(bytes, SettableMetadata(contentType: 'video/mp4'));
+      } else {
+        await ref.putFile(File(videoFile.path), SettableMetadata(contentType: 'video/mp4'));
+      }
+      final videoUrl = await ref.getDownloadURL();
+
+      await _firestore.collection('statuses').add({
+        'uid': uid,
+        'username': username,
+        'photo_url': photoUrl,
+        'content': videoUrl,
+        'caption': caption,
+        'type': 'video',
+        'bg_color': 0xFF000000,
+        'viewed_by': [],
+        'expires_at': expiresAt.toIso8601String(),
+        'created_at': now.toIso8601String(),
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+    } catch (e) {
+      throw Exception('Gagal mengupload video: $e');
+    }
   }
 
   /// Get all public statuses within 24h, grouped by user

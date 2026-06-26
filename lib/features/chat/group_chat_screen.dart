@@ -665,6 +665,17 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                     final data = messages[index];
                     final isMe = data['sender_id'] == currentUser.uid;
                     final senderId = data['sender_id'] as String;
+                    
+                    String formatTime(String? isoString) {
+                      if (isoString == null) return '';
+                      try {
+                        final date = DateTime.parse(isoString).toLocal();
+                        return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+                      } catch (_) {
+                        return '';
+                      }
+                    }
+                    
                     final type = data['type'] as String? ?? 'text';
                     final isAudio = type == 'audio';
                     final reactions =
@@ -776,21 +787,33 @@ class _GroupChatScreenState extends State<GroupChatScreen> {
                                                     ?.color,
                                           ),
                                         ),
-                                      if (isEdited)
-                                        Padding(
-                                          padding:
-                                              const EdgeInsets.only(top: 2),
-                                          child: Text(
-                                            'edited',
-                                            style: TextStyle(
-                                              fontSize: 10,
-                                              fontStyle: FontStyle.italic,
-                                              color: isMe
-                                                  ? Colors.white70
-                                                  : Colors.grey,
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 2),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          mainAxisAlignment: MainAxisAlignment.end,
+                                          children: [
+                                            if (isEdited) ...[
+                                              Text(
+                                                'edited',
+                                                style: TextStyle(
+                                                  fontSize: 10,
+                                                  fontStyle: FontStyle.italic,
+                                                  color: isMe ? Colors.white70 : Colors.grey,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                            ],
+                                            Text(
+                                              formatTime(data['created_at'] as String?),
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: isMe ? Colors.white70 : Colors.grey,
+                                              ),
                                             ),
-                                          ),
+                                          ],
                                         ),
+                                      ),
                                       _buildReactions(reactions, isMe),
                                     ],
                                   ),
