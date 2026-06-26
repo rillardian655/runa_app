@@ -117,3 +117,4 @@ GoRouter createAppRouter(AuthService authService) {
     ),
   ],
 );
+}
